@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Mobile Workstation - HTML5 Audio Engine</title>
+  <title>Mobile Workstation - Smart Magnet Snapping</title>
   <style>
     :root {
       --panel-bg: #2b2d32;
@@ -69,6 +69,10 @@
       touch-action: manipulation;
     }
     .rack-btn.accent { background: #841515; }
+    .rack-btn.active-snap {
+      background: var(--accent-gold);
+      color: #000;
+    }
 
     select {
       background: #111; color: var(--accent-gold);
@@ -99,6 +103,19 @@
       border-left: 1px solid #555; font-size: 10px; color: #aaa; padding-left: 2px;
     }
 
+    /* Guía visual del imán */
+    .snap-guide {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: var(--accent-gold);
+      box-shadow: 0 0 8px var(--accent-gold);
+      z-index: 100;
+      display: none;
+      pointer-events: none;
+    }
+
     .track-strip {
       display: flex;
       width: max-content;
@@ -120,7 +137,6 @@
       justify-content: space-between;
     }
 
-    /* Input personalizado con selector estricto de formatos */
     .file-input-wrapper {
       position: relative;
       overflow: hidden;
@@ -187,6 +203,10 @@
       touch-action: none;
       z-index: 5;
     }
+    .audio-clip.snapped {
+      border-color: var(--accent-gold);
+      box-shadow: 0 0 6px rgba(212, 175, 55, 0.6);
+    }
 
     .remove-btn {
       position: absolute; right: 2px; top: 2px; background: rgba(0,0,0,0.6);
@@ -200,6 +220,7 @@
 <div class="header-panel">
   <div class="header-row">
     <button class="rack-btn" id="addTrackBtn">+ Pista</button>
+    <button class="rack-btn active-snap" id="snapToggleBtn">🧲 SNAP ON</button>
     <div class="display-screen" id="statusDisplay">SISTEMA LISTO</div>
     <button class="rack-btn" id="playBtn">▶ / ❚❚</button>
   </div>
@@ -216,7 +237,10 @@
   </div>
 </div>
 
-<div class="workspace">
+<div class="workspace" id="workspace">
+  <!-- Línea guía vertical para cuando se activa el imán -->
+  <div class="snap-guide" id="snapGuide"></div>
+
   <div class="ruler-wrapper">
     <div class="ruler-container" id="ruler"></div>
   </div>
@@ -228,13 +252,18 @@
   const MAX_DURATION_SEC = MAX_MINUTES * 60;
   const PIXELS_PER_SECOND = 1.5; 
   const TIMELINE_WIDTH = MAX_DURATION_SEC * PIXELS_PER_SECOND;
+  const SNAP_THRESHOLD_PX = 15; // Distancia en píxeles para activar la atracción del imán
 
   let audioCtx = null;
   let tracks = [];
   let isPlaying = false;
   let activeSources = [];
+  let isSnapEnabled = true;
 
   const ruler = document.getElementById('ruler');
+  const snapGuide = document.getElementById('snapGuide');
+  const snapToggleBtn = document.getElementById('snapToggleBtn');
+
   ruler.style.width = `${TIMELINE_WIDTH}px`;
   for (let min = 0; min <= MAX_MINUTES; min += 1) {
     const mark = document.createElement('div');
@@ -243,6 +272,13 @@
     if (min % 5 === 0) mark.innerText = `${min}m`;
     ruler.appendChild(mark);
   }
+
+  // Toggle del Imán
+  snapToggleBtn.addEventListener('click', () => {
+    isSnapEnabled = !isSnapEnabled;
+    snapToggleBtn.classList.toggle('active-snap', isSnapEnabled);
+    snapToggleBtn.innerText = isSnapEnabled ? "🧲 SNAP ON" : "🧲 SNAP OFF";
+  });
 
   function getAudioContext() {
     if (!audioCtx) {
@@ -276,7 +312,6 @@
           CH ${tracks.length + 1}
         </div>
         
-        <!-- Input con formatos explicitados para Safari/iOS y Android -->
         <div class="file-input-wrapper">
           <div class="file-input-btn">📂 Cargar Audio</div>
           <input type="file" 
@@ -299,7 +334,7 @@
       </div>
 
       <div class="track-timeline" id="timeline-${trackId}" style="width: ${TIMELINE_WIDTH}px;">
-        <span class="drop-zone-text" id="status-${trackId}">Selecciona un audio (WAV, MP3, FLAC, M4A...)</span>
+        <span class="drop-zone-text" id="status-${trackId}">Selecciona un audio</span>
       </div>
     `;
 
@@ -341,21 +376,18 @@
     });
   }
 
-  // --- MOTOR DE PROCESAMIENTO MEDIANTE ETIQUETA/OBJETO <AUDIO> Y BLOB URL ---
   async function processAudioFile(file, trackObj) {
     const statusText = document.getElementById(`status-${trackObj.id}`);
     const globalScreen = document.getElementById('statusDisplay');
     
     const fileSizeMB = (file.size / (1024 * 1024)).toFixed(1);
     statusText.style.color = '#888';
-    statusText.innerText = `Cargando Blob: ${file.name} (${fileSizeMB}MB)...`;
+    statusText.innerText = `Cargando: ${file.name} (${fileSizeMB}MB)...`;
     globalScreen.innerText = "PROCESANDO BLOB...";
 
-    // 1. Crear Blob URL en memoria nativa del navegador
     const blobUrl = URL.createObjectURL(file);
 
     try {
-      // 2. Probar compatibilidad del archivo con la API HTML5 <audio>
       const audioElement = new Audio();
       audioElement.src = blobUrl;
 
@@ -364,8 +396,7 @@
         audioElement.onerror = () => reject(new Error("Formato/Códec no compatible en este navegador."));
       });
 
-      // 3. Descargar el ArrayBuffer via fetch desde la Blob URL (usa el pipeline de C++ de WebKit)
-      statusText.innerText = "Decodificando PCM en WebAudio...";
+      statusText.innerText = "Decodificando PCM...";
       globalScreen.innerText = "DECODIFICANDO PCM...";
 
       const response = await fetch(blobUrl);
@@ -380,12 +411,11 @@
         trackObj.panNode.connect(ctx.destination);
       }
 
-      // 4. Decodificación PCM final
       const decodedBuffer = await new Promise((resolve, reject) => {
         ctx.decodeAudioData(
           arrayBuffer,
           (buffer) => resolve(buffer),
-          (err) => reject(new Error("Falla al convertir PCM en AudioContext."))
+          (err) => reject(new Error("Falla al convertir PCM."))
         );
       });
 
@@ -399,9 +429,22 @@
       statusText.style.color = 'var(--led-red)';
       globalScreen.innerText = "ERROR FORMATO";
     } finally {
-      // Liberar la Blob URL para no saturar memoria RAM
       URL.revokeObjectURL(blobUrl);
     }
+  }
+
+  // Obtenemos todos los puntos de finalización de pistas para calcular el magnetismo
+  function getSnapPoints(currentTrackId) {
+    const points = [0]; // El inicio absoluto (0s) siempre es un punto de imán
+    tracks.forEach(t => {
+      if (t.id !== currentTrackId && t.buffer) {
+        const endPx = (t.startTime + t.buffer.duration) * PIXELS_PER_SECOND;
+        const startPx = t.startTime * PIXELS_PER_SECOND;
+        points.push(endPx);
+        points.push(startPx);
+      }
+    });
+    return points;
   }
 
   function renderClip(trackId, name, duration) {
@@ -428,28 +471,87 @@
     let startX = 0;
     let initialLeft = 0;
 
-    clip.addEventListener('touchstart', (e) => {
+    // EVENTOS TÁCTILES Y DE RATÓN CON LÓGICA DE IMÁN
+    const onStart = (clientX) => {
       isDragging = true;
-      startX = e.touches[0].clientX;
+      startX = clientX;
       initialLeft = parseFloat(clip.style.left) || 0;
-      e.stopPropagation(); 
+    };
+
+    const onMove = (clientX) => {
+      if (!isDragging) return;
+      let rawLeft = initialLeft + (clientX - startX);
+      if (rawLeft < 0) rawLeft = 0;
+
+      const maxLeft = TIMELINE_WIDTH - (duration * PIXELS_PER_SECOND);
+      if (rawLeft > maxLeft) rawLeft = maxLeft;
+
+      let finalLeft = rawLeft;
+      let isSnapped = false;
+      let snapPointPx = 0;
+
+      // Lógica del imán
+      if (isSnapEnabled) {
+        const snapPoints = getSnapPoints(trackId);
+        
+        for (let pt of snapPoints) {
+          // Evaluar si el principio de este clip se pega al final/inicio de otro
+          if (Math.abs(rawLeft - pt) < SNAP_THRESHOLD_PX) {
+            finalLeft = pt;
+            isSnapped = true;
+            snapPointPx = pt;
+            break;
+          }
+        }
+      }
+
+      // Actualizar interfaz y línea de guía visual
+      clip.style.left = `${finalLeft}px`;
+      
+      if (isSnapped) {
+        clip.classList.add('snapped');
+        snapGuide.style.display = 'block';
+        // Posicionar línea vertical alineada con los controles
+        snapGuide.style.left = `${snapPointPx + 140}px`; 
+      } else {
+        clip.classList.remove('snapped');
+        snapGuide.style.display = 'none';
+      }
+      
+      const trackObj = tracks.find(t => t.id === trackId);
+      if (trackObj) trackObj.startTime = finalLeft / PIXELS_PER_SECOND;
+    };
+
+    const onEnd = () => {
+      if (!isDragging) return;
+      isDragging = false;
+      clip.classList.remove('snapped');
+      snapGuide.style.display = 'none';
+    };
+
+    // Touch
+    clip.addEventListener('touchstart', (e) => {
+      onStart(e.touches[0].clientX);
+      e.stopPropagation();
     }, {passive: false});
 
     window.addEventListener('touchmove', (e) => {
-      if (!isDragging) return;
-      let newLeft = initialLeft + (e.touches[0].clientX - startX);
-      if (newLeft < 0) newLeft = 0;
-
-      const maxLeft = TIMELINE_WIDTH - (duration * PIXELS_PER_SECOND);
-      if (newLeft > maxLeft) newLeft = maxLeft;
-
-      clip.style.left = `${newLeft}px`;
-      
-      const trackObj = tracks.find(t => t.id === trackId);
-      if (trackObj) trackObj.startTime = newLeft / PIXELS_PER_SECOND;
+      if (isDragging) onMove(e.touches[0].clientX);
     }, {passive: false});
 
-    window.addEventListener('touchend', () => { isDragging = false; });
+    window.addEventListener('touchend', onEnd);
+
+    // Mouse
+    clip.addEventListener('mousedown', (e) => {
+      onStart(e.clientX);
+      e.stopPropagation();
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (isDragging) onMove(e.clientX);
+    });
+
+    window.addEventListener('mouseup', onEnd);
 
     const statusText = document.getElementById(`status-${trackId}`);
     if (statusText) statusText.style.display = 'none';
