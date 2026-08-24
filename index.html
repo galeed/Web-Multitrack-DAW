@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Mobile Workstation - Fix Loading</title>
+  <title>Mobile Workstation - HTML5 Audio Engine</title>
   <style>
     :root {
       --panel-bg: #2b2d32;
@@ -12,7 +12,7 @@
       --led-yellow: #ffcc00;
       --screen-text: #33ff55;
       --track-height: 95px;
-      --controls-width: 135px;
+      --controls-width: 140px;
     }
 
     body {
@@ -120,10 +120,32 @@
       justify-content: space-between;
     }
 
-    .file-input {
+    /* Input personalizado con selector estricto de formatos */
+    .file-input-wrapper {
+      position: relative;
+      overflow: hidden;
+      display: inline-block;
       width: 100%;
-      font-size: 0.65rem;
+    }
+    .file-input-btn {
+      background: #444;
       color: #fff;
+      border: 1px solid #111;
+      padding: 4px;
+      font-size: 0.65rem;
+      border-radius: 3px;
+      text-align: center;
+      width: 100%;
+      box-sizing: border-box;
+      cursor: pointer;
+    }
+    .file-input-wrapper input[type=file] {
+      font-size: 100px;
+      position: absolute;
+      left: 0;
+      top: 0;
+      opacity: 0;
+      cursor: pointer;
     }
 
     .btn-led-group { display: flex; gap: 4px; }
@@ -136,7 +158,7 @@
     .slider-row {
       display: flex; justify-content: space-between; align-items: center; font-size: 0.6rem;
     }
-    input[type="range"] { width: 70px; }
+    input[type="range"] { width: 75px; }
 
     .track-timeline {
       position: relative;
@@ -253,7 +275,14 @@
         <div style="color:var(--accent-gold); font-size:0.75rem; font-weight:bold; text-align:center;">
           CH ${tracks.length + 1}
         </div>
-        <input type="file" accept="audio/*" class="file-input">
+        
+        <!-- Input con formatos explicitados para Safari/iOS y Android -->
+        <div class="file-input-wrapper">
+          <div class="file-input-btn">📂 Cargar Audio</div>
+          <input type="file" 
+                 accept="audio/*, .mp3, .wav, .flac, .m4a, .aac, .ogg, .alac, .aiff, .caf, .opus" 
+                 class="file-input">
+        </div>
         
         <div class="btn-led-group">
           <button class="led-btn mute-btn">M</button>
@@ -270,7 +299,7 @@
       </div>
 
       <div class="track-timeline" id="timeline-${trackId}" style="width: ${TIMELINE_WIDTH}px;">
-        <span class="drop-zone-text" id="status-${trackId}">Selecciona un archivo de audio</span>
+        <span class="drop-zone-text" id="status-${trackId}">Selecciona un audio (WAV, MP3, FLAC, M4A...)</span>
       </div>
     `;
 
@@ -312,21 +341,35 @@
     });
   }
 
-  // MOTOR DE LECTURA CON FILEREADER (SOPORTE COMPLETO WEBKIT / IOS)
-  function processAudioFile(file, trackObj) {
+  // --- MOTOR DE PROCESAMIENTO MEDIANTE ETIQUETA/OBJETO <AUDIO> Y BLOB URL ---
+  async function processAudioFile(file, trackObj) {
     const statusText = document.getElementById(`status-${trackObj.id}`);
     const globalScreen = document.getElementById('statusDisplay');
     
     const fileSizeMB = (file.size / (1024 * 1024)).toFixed(1);
     statusText.style.color = '#888';
-    statusText.innerText = `Leyendo: ${file.name} (${fileSizeMB}MB)...`;
-    globalScreen.innerText = "LEYENDO ARCHIVO...";
+    statusText.innerText = `Cargando Blob: ${file.name} (${fileSizeMB}MB)...`;
+    globalScreen.innerText = "PROCESANDO BLOB...";
 
-    const reader = new FileReader();
+    // 1. Crear Blob URL en memoria nativa del navegador
+    const blobUrl = URL.createObjectURL(file);
 
-    reader.onload = function(e) {
-      statusText.innerText = "Decodificando audio en WebAudio...";
+    try {
+      // 2. Probar compatibilidad del archivo con la API HTML5 <audio>
+      const audioElement = new Audio();
+      audioElement.src = blobUrl;
+
+      await new Promise((resolve, reject) => {
+        audioElement.onloadedmetadata = () => resolve();
+        audioElement.onerror = () => reject(new Error("Formato/Códec no compatible en este navegador."));
+      });
+
+      // 3. Descargar el ArrayBuffer via fetch desde la Blob URL (usa el pipeline de C++ de WebKit)
+      statusText.innerText = "Decodificando PCM en WebAudio...";
       globalScreen.innerText = "DECODIFICANDO PCM...";
+
+      const response = await fetch(blobUrl);
+      const arrayBuffer = await response.arrayBuffer();
 
       const ctx = getAudioContext();
 
@@ -337,35 +380,28 @@
         trackObj.panNode.connect(ctx.destination);
       }
 
-      // Decodificación con soporte explícito de Promesa y Callback
-      const arrayBuffer = e.target.result;
+      // 4. Decodificación PCM final
+      const decodedBuffer = await new Promise((resolve, reject) => {
+        ctx.decodeAudioData(
+          arrayBuffer,
+          (buffer) => resolve(buffer),
+          (err) => reject(new Error("Falla al convertir PCM en AudioContext."))
+        );
+      });
 
-      ctx.decodeAudioData(
-        arrayBuffer,
-        function(decodedBuffer) {
-          trackObj.buffer = decodedBuffer;
-          renderClip(trackObj.id, file.name, decodedBuffer.duration);
-          globalScreen.innerText = "CARGA EXITOSA";
-        },
-        function(err) {
-          console.error("Decode Error:", err);
-          let errDetail = err ? (err.message || err.name) : "Códec no soportado";
-          statusText.innerText = `ERR DECODE: ${errDetail}. (Safari no lee OGG o FLAC no nativos)`;
-          statusText.style.color = 'var(--led-red)';
-          globalScreen.innerText = "ERROR DECODE";
-        }
-      );
-    };
+      trackObj.buffer = decodedBuffer;
+      renderClip(trackObj.id, file.name, decodedBuffer.duration);
+      globalScreen.innerText = "CARGA EXITOSA";
 
-    reader.onerror = function(err) {
-      console.error("FileReader Error:", err);
-      statusText.innerText = "ERR LECTURA: El navegador bloqueó el archivo local.";
+    } catch (err) {
+      console.error(err);
+      statusText.innerText = `ERR: ${err.message}`;
       statusText.style.color = 'var(--led-red)';
-      globalScreen.innerText = "ERROR LECTURA";
-    };
-
-    // Iniciar lectura del Blob local
-    reader.readAsArrayBuffer(file);
+      globalScreen.innerText = "ERROR FORMATO";
+    } finally {
+      // Liberar la Blob URL para no saturar memoria RAM
+      URL.revokeObjectURL(blobUrl);
+    }
   }
 
   function renderClip(trackId, name, duration) {
