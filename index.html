@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Web Multitrack DAW</title>
+  <style>
+    :root {
+      --bg: #121214;
+      --panel: #1e1e24;
+      --accent: #ff4757;
+      --text: #e1e1e6;
+      --track-bg: #2a2a32;
+    }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 20px;
+    }
+    .controls {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+      align-items: center;
+      flex-wrap: wrap;
+      background: var(--panel);
+      padding: 15px;
+      border-radius: 8px;
+    }
+    button, select, input {
+      background: #32323e;
+      color: var(--text);
+      border: 1px solid #444452;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    button:hover { background: #3e3e4d; }
+    .track-list { display: flex; flex-direction: column; gap: 10px; }
+    .track {
+      background: var(--track-bg);
+      padding: 12px;
+      border-radius: 6px;
+      display: grid;
+      grid-template-columns: 200px 1fr 100px;
+      align-items: center;
+      gap: 15px;
+    }
+    .time-display { font-family: monospace; font-size: 1.2rem; margin-left: auto; }
+  </style>
+  <!-- Librería para codificación fácil de WAV 16/24/32 bits -->
+  <script src="https://unpkg.com/wavefile"></script>
+</head>
+<body>
+
+  <h1>Web Multitrack Studio</h1>
+
+  <div class="controls">
+    <button id="addTrackBtn">+ Añadir Pista</button>
+    <button id="playBtn">Play / Pause</button>
+    
+    <label>Sample Rate:
+      <select id="sampleRateSelect">
+        <option value="48000">48000 Hz</option>
+        <option value="44100">44100 Hz</option>
+      </select>
+    </label>
+
+    <label>Bit Depth:
+      <select id="bitDepthSelect">
+        <option value="16">16-bit PCM</option>
+        <option value="24">24-bit PCM</option>
+        <option value="32f">32-bit Float</option>
+      </select>
+    </label>
+
+    <button id="exportBtn" style="background: var(--accent);">Exportar Mezcla</button>
+    <div class="time-display" id="timeDisplay">00:00 / 80:00</div>
+  </div>
+
+  <div class="track-list" id="trackContainer"></div>
+
+<script>
+  const MAX_DURATION_SEC = 80 * 60; // Límite de 80 minutos
+  let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  let tracks = [];
+  let isPlaying = false;
+  let startTime = 0;
+
+  const trackContainer = document.getElementById('trackContainer');
+
+  document.getElementById('addTrackBtn').addEventListener('click', addTrack);
+  document.getElementById('playBtn').addEventListener('click', togglePlay);
+  document.getElementById('exportBtn').addEventListener('click', exportWav);
+
+  function addTrack() {
+    const trackId = Date.now();
+    const trackDiv = document.createElement('div');
+    trackDiv.className = 'track';
+    trackDiv.id = `track-${trackId}`;
+
+    trackDiv.innerHTML = `
+      <div>
+        <strong>Pista ${tracks.length + 1}</strong><br>
+        <input type="file" accept="audio/*" class="file-input">
+      </div>
+      <div>
+        <label>Vol: <input type="range" class="vol-slider" min="0" max="1" step="0.01" value="1"></label>
+        <label>Pan: <input type="range" class="pan-slider" min="-1" max="1" step="0.01" value="0"></label>
+      </div>
+      <button onclick="removeTrack(${trackId})">Eliminar</button>
+    `;
+
+    trackContainer.appendChild(trackDiv);
+
+    const trackObj = {
+      id: trackId,
+      buffer: null,
+      gainNode: audioCtx.createGain(),
+      panNode: audioCtx.createStereoPanner(),
+      source: null,
+      volume: 1,
+      pan: 0
+    };
+
+    // Conectar nodos para esta pista
+    trackObj.gainNode.connect(trackObj.panNode);
+    trackObj.panNode.connect(audioCtx.destination);
+
+    // Eventos de la GUI
+    const fileInput = trackDiv.querySelector('.file-input');
+    fileInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const arrayBuffer = await file.arrayBuffer();
+      const decodedData = await audioCtx.decodeAudioData(arrayBuffer);
+
+      if (decodedData.duration > MAX_DURATION_SEC) {
+        alert("El archivo excede el límite permitido de 80 minutos.");
+        return;
+      }
+
+      trackObj.buffer = decodedData;
+    });
+
+    trackDiv.querySelector('.vol-slider').addEventListener('input', (e) => {
+      trackObj.volume = parseFloat(e.target.value);
+      trackObj.gainNode.gain.value = trackObj.volume;
+    });
+
+    trackDiv.querySelector('.pan-slider').addEventListener('input', (e) => {
+      trackObj.pan = parseFloat(e.target.value);
+      trackObj.panNode.pan.value = trackObj.pan;
+    });
+
+    tracks.push(trackObj);
+  }
+
+  function removeTrack(id) {
+    tracks = tracks.filter(t => t.id !== id);
+    document.getElementById(`track-${id}`).remove();
+  }
+
+  function togglePlay() {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+
+    if (isPlaying) {
+      tracks.forEach(t => t.source && t.source.stop());
+      isPlaying = false;
+    } else {
+      tracks.forEach(t => {
+        if (!t.buffer) return;
+        t.source = audioCtx.createBufferSource();
+        t.source.buffer = t.buffer;
+        t.source.connect(t.gainNode);
+        t.source.start(0);
+      });
+      isPlaying = true;
+    }
+  }
+
+  async function exportWav() {
+    const targetSampleRate = parseInt(document.getElementById('sampleRateSelect').value);
+    const bitDepth = document.getElementById('bitDepthSelect').value;
+
+    // Calcular la duración máxima entre todas las pistas activas (máx 80 min)
+    let maxDuration = 0;
+    tracks.forEach(t => {
+      if (t.buffer && t.buffer.duration > maxDuration) {
+        maxDuration = t.buffer.duration;
+      }
+    });
+
+    if (maxDuration === 0) {
+      alert("Carga al menos un archivo de audio para exportar.");
+      return;
+    }
+
+    const renderDuration = Math.min(maxDuration, MAX_DURATION_SEC);
+    
+    // Renderizado Offline (más rápido que tiempo real)
+    const offlineCtx = new OfflineAudioContext(2, renderDuration * targetSampleRate, targetSampleRate);
+
+    tracks.forEach(t => {
+      if (!t.buffer) return;
+      const source = offlineCtx.createBufferSource();
+      const gain = offlineCtx.createGain();
+      const pan = offlineCtx.createStereoPanner();
+
+      source.buffer = t.buffer;
+      gain.gain.value = t.volume;
+      pan.pan.value = t.pan;
+
+      source.connect(gain);
+      gain.connect(pan);
+      pan.connect(offlineCtx.destination);
+
+      source.start(0);
+    });
+
+    const renderedBuffer = await offlineCtx.startRendering();
+
+    // Extraer canales estéreo
+    const leftChannel = renderedBuffer.getChannelData(0);
+    const rightChannel = renderedBuffer.getChannelData(1);
+
+    // Formatear archivo WAV usando wavefile
+    const wav = new wavefile.WaveFile();
+    wav.fromScratch(2, targetSampleRate, bitDepth, [leftChannel, rightChannel]);
+
+    // Descargar
+    const blob = new Blob([wav.toBuffer()], { type: 'audio/wav' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `mezcla_${targetSampleRate}Hz_${bitDepth}bit.wav`;
+    a.click();
+  }
+</script>
+</body>
+</html>
