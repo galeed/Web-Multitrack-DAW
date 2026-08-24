@@ -15,6 +15,7 @@
       --led-yellow: #ffcc00;
       --screen-bg: #0d130e;
       --screen-text: #33ff55;
+      --error-text: #ff3333;
     }
     body {
       margin: 0;
@@ -56,6 +57,8 @@
       font-size: 1rem;
       border-radius: 4px;
       text-shadow: 0 0 5px var(--screen-text);
+      min-width: 200px;
+      text-align: center;
     }
     .rack-btn {
       background: linear-gradient(180deg, #4c505c 0%, #2c2e35 100%);
@@ -152,18 +155,22 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      z-index: 10;
     }
     .drop-zone-text {
       position: absolute;
       width: 100%;
       text-align: center;
       top: 28px;
-      font-size: 0.7rem;
+      font-size: 0.75rem;
       color: #666;
       pointer-events: none;
+      z-index: 1;
     }
-    .remove-btn { background: none; border: none; color: #666; font-weight: bold; cursor: pointer; }
+    .error-log { color: var(--error-text); font-weight: bold; text-shadow: none; }
+    .remove-btn { background: none; border: none; color: #666; font-weight: bold; cursor: pointer; font-size: 1.2rem; }
     .remove-btn:hover { color: var(--led-red); }
+    input[type="file"] { max-width: 140px; }
   </style>
   <script src="https://unpkg.com/wavefile"></script>
 </head>
@@ -172,9 +179,9 @@
 <div class="console-frame">
   <div class="header-panel">
     <div style="display:flex; gap:8px; align-items:center;">
-      <button class="rack-btn" id="addTrackBtn">+ Pista</button>
+      <button class="rack-btn" id="addTrackBtn">+ Nueva Pista</button>
       <button class="rack-btn" id="playBtn">▶ / ❚❚ Play</button>
-      <div class="display-screen" id="statusDisplay">READY / 80 MIN</div>
+      <div class="display-screen" id="statusDisplay">SYSTEM READY</div>
     </div>
 
     <div style="display:flex; gap:10px; align-items:center;">
@@ -211,7 +218,7 @@
   let isPlaying = false;
   let activeSources = [];
 
-  // Inicializar regla de 80 minutos
+  // Dibujar regla de 80 minutos
   const ruler = document.getElementById('ruler');
   for (let min = 0; min <= MAX_MINUTES; min += 10) {
     const mark = document.createElement('div');
@@ -221,10 +228,11 @@
     ruler.appendChild(mark);
   }
 
-  function getAudioContext() {
+  // Despertar AudioContext de forma síncrona en el primer clic
+  function initAudioContext() {
     if (!audioCtx) {
-      const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
-      audioCtx = new AudioCtxClass();
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new AudioContext();
     }
     if (audioCtx.state === 'suspended') {
       audioCtx.resume();
@@ -232,11 +240,15 @@
     return audioCtx;
   }
 
-  document.getElementById('addTrackBtn').addEventListener('click', () => addTrack());
+  // Forzar inicialización en cualquier interacción global para evitar bloqueos en iOS/Safari
+  document.body.addEventListener('click', initAudioContext, { once: true });
+
+  document.getElementById('addTrackBtn').addEventListener('click', addTrack);
   document.getElementById('playBtn').addEventListener('click', togglePlay);
   document.getElementById('exportBtn').addEventListener('click', exportWav);
 
-  addTrack(); // Pista inicial
+  // Agregar la primera pista por defecto
+  addTrack();
 
   function addTrack() {
     const trackId = Date.now();
@@ -248,13 +260,15 @@
       <div class="track-controls">
         <div style="display:flex; justify-content:space-between; align-items:center;">
           <strong style="color:var(--accent-gold); font-size:0.75rem;">CH ${tracks.length + 1}</strong>
-          <input type="file" accept="audio/*" class="file-input" style="width:110px; font-size:0.6rem;">
         </div>
-        <div class="btn-led-group">
+        <!-- Botón de archivo nativo -->
+        <input type="file" accept="audio/*" class="file-input" style="font-size:0.6rem; color:#fff;">
+        
+        <div class="btn-led-group" style="margin-top: 5px;">
           <button class="led-btn mute-btn">MUTE</button>
           <button class="led-btn solo-btn">SOLO</button>
         </div>
-        <div style="display:flex; justify-content:space-between; font-size:0.65rem;">
+        <div style="display:flex; justify-content:space-between; font-size:0.65rem; margin-top:5px;">
           <span>VOL</span>
           <input type="range" class="vol-slider" min="0" max="1" step="0.01" value="1" style="width:110px;">
         </div>
@@ -265,7 +279,7 @@
       </div>
 
       <div class="track-timeline" id="timeline-${trackId}">
-        <span class="drop-zone-text" id="status-${trackId}">Selecciona o arrastra un audio aquí</span>
+        <span class="drop-zone-text" id="status-${trackId}">Selecciona un audio en el botón izquierdo</span>
       </div>
 
       <button class="remove-btn" onclick="removeTrack(${trackId})">✕</button>
@@ -285,21 +299,36 @@
       isSolo: false
     };
 
+    tracks.push(trackObj);
+
+    // Event listeners de la pista
     const fileInput = trackDiv.querySelector('.file-input');
     const timeline = trackDiv.querySelector('.track-timeline');
 
+    // 1. Carga por Botón (Input File)
     fileInput.addEventListener('change', (e) => {
-      if (e.target.files[0]) processAudioFile(e.target.files[0], trackObj);
+      if (e.target.files.length > 0) {
+        processAudioFile(e.target.files[0], trackObj);
+      }
     });
 
-    timeline.addEventListener('dragover', (e) => { e.preventDefault(); timeline.classList.add('dragover'); });
-    timeline.addEventListener('dragleave', () => timeline.classList.remove('dragover'));
+    // 2. Carga por Drag & Drop
+    timeline.addEventListener('dragover', (e) => { 
+      e.preventDefault(); 
+      timeline.classList.add('dragover'); 
+    });
+    timeline.addEventListener('dragleave', () => {
+      timeline.classList.remove('dragover');
+    });
     timeline.addEventListener('drop', (e) => {
       e.preventDefault();
       timeline.classList.remove('dragover');
-      if (e.dataTransfer.files[0]) processAudioFile(e.dataTransfer.files[0], trackObj);
+      if (e.dataTransfer.files.length > 0) {
+        processAudioFile(e.dataTransfer.files[0], trackObj);
+      }
     });
 
+    // Controles de volumen, paneo, mute, solo
     trackDiv.querySelector('.vol-slider').addEventListener('input', (e) => {
       trackObj.volume = parseFloat(e.target.value);
       updateGains();
@@ -322,46 +351,22 @@
       soloBtn.classList.toggle('active-solo', trackObj.isSolo);
       updateGains();
     });
-
-    tracks.push(trackObj);
   }
 
-  // Carga robusta y universal compatible con todos los navegadores
+  // --- MOTOR DE CARGA BLINDADO ---
   async function processAudioFile(file, trackObj) {
     const statusText = document.getElementById(`status-${trackObj.id}`);
     const globalScreen = document.getElementById('statusDisplay');
     
     try {
-      if (statusText) statusText.innerText = "Cargando archivo...";
-      globalScreen.innerText = "DECODING AUDIO...";
+      // Paso 1: Inicialización
+      statusText.innerText = "[1/3] Preparando entorno...";
+      statusText.classList.remove("error-log");
+      
+      const ctx = initAudioContext();
+      if (!ctx) throw new Error("AudioContext no soportado en este navegador.");
 
-      const ctx = getAudioContext();
-
-      // 1. Lectura por FileReader (compatibilidad total)
-      const arrayBuffer = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = (err) => reject(err);
-        reader.readAsArrayBuffer(file);
-      });
-
-      // 2. Decodificación compatible con Callback y Promesas (Safari / iOS / Chrome)
-      const decodedData = await new Promise((resolve, reject) => {
-        ctx.decodeAudioData(
-          arrayBuffer.slice(0),
-          (buffer) => resolve(buffer),
-          (err) => reject(err || new Error("Formato no soportado"))
-        );
-      });
-
-      if (decodedData.duration > MAX_DURATION_SEC) {
-        alert("El archivo supera los 80 minutos máximos.");
-        if (statusText) statusText.innerText = "Excede 80 min";
-        globalScreen.innerText = "ERROR: >80 MIN";
-        return;
-      }
-
-      // 3. Crear nodos de audio para esta pista si no existen
+      // Crear nodos si no existen
       if (!trackObj.gainNode) {
         trackObj.gainNode = ctx.createGain();
         trackObj.panNode = ctx.createStereoPanner();
@@ -369,20 +374,46 @@
         trackObj.panNode.connect(ctx.destination);
       }
 
+      // Paso 2: Lectura
+      statusText.innerText = `[2/3] Leyendo: ${file.name}...`;
+      globalScreen.innerText = "READING MEMORY...";
+      const arrayBuffer = await file.arrayBuffer();
+
+      // Paso 3: Decodificación (Usamos callbacks explícitos para no romper iOS/Safari)
+      statusText.innerText = "[3/3] Decodificando (puede tardar si es largo)...";
+      globalScreen.innerText = "DECODING PCM...";
+
+      const decodedData = await new Promise((resolve, reject) => {
+        ctx.decodeAudioData(
+          arrayBuffer,
+          (buffer) => resolve(buffer),
+          (error) => reject(new Error("Formato inválido o falta de RAM. " + (error ? error.message : "")))
+        );
+      });
+
+      // Validación de 80 minutos
+      if (decodedData.duration > MAX_DURATION_SEC) {
+        throw new Error("El archivo excede el límite de 80 minutos.");
+      }
+
+      // Éxito
       trackObj.buffer = decodedData;
       renderClip(trackObj.id, file.name, decodedData.duration);
-      globalScreen.innerText = "LOADED: " + file.name.substring(0, 15);
+      globalScreen.innerText = "FILE LOADED OK";
 
     } catch (err) {
       console.error(err);
-      if (statusText) statusText.innerText = "Error al decodificar audio";
-      globalScreen.innerText = "DECODE ERROR";
+      statusText.innerText = `ERROR: ${err.message}`;
+      statusText.classList.add("error-log");
+      globalScreen.innerText = "SYSTEM ERROR";
     }
   }
 
   function renderClip(trackId, name, duration) {
     const timeline = document.getElementById(`timeline-${trackId}`);
-    timeline.innerHTML = '';
+    
+    // Limpiar clíps anteriores, pero conservar el texto de estado por si acaso
+    Array.from(timeline.querySelectorAll('.audio-clip')).forEach(el => el.remove());
 
     const clip = document.createElement('div');
     clip.className = 'audio-clip';
@@ -415,6 +446,11 @@
     });
 
     window.addEventListener('mouseup', () => { isDragging = false; });
+    
+    // Ocultar texto de fondo si hay audio
+    const statusText = document.getElementById(`status-${trackId}`);
+    if (statusText) statusText.style.display = 'none';
+
     timeline.appendChild(clip);
   }
 
@@ -436,7 +472,7 @@
   }
 
   function togglePlay() {
-    const ctx = getAudioContext();
+    const ctx = initAudioContext();
 
     if (isPlaying) {
       activeSources.forEach(s => s.stop());
@@ -513,7 +549,7 @@
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `mezcla_${targetSampleRate}Hz_${bitDepth}bit.wav`;
+    a.download = `mezcla_master_${targetSampleRate}Hz_${bitDepth}bit.wav`;
     a.click();
 
     document.getElementById('statusDisplay').innerText = "EXPORT COMPLETE";
