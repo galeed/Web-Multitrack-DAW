@@ -1,253 +1,262 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+  <!-- Bloqueo estricto del zoom para emular una app nativa -->
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Analog Multitrack Workstation</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Mobile Multitrack Workstation</title>
   <style>
     :root {
-      --rack-bg: #1a1b1e;
       --panel-bg: #2b2d32;
-      --panel-border: #3a3d45;
-      --wood-side: #4a2810;
       --accent-gold: #d4af37;
       --led-red: #ff3b30;
       --led-yellow: #ffcc00;
-      --screen-bg: #0d130e;
       --screen-text: #33ff55;
-      --error-text: #ff3333;
+      --track-height: 90px;
+      --controls-width: 140px;
     }
+    
+    /* Bloquear el scroll global de la página */
     body {
       margin: 0;
-      font-family: 'Courier New', Courier, monospace;
+      padding: 0;
+      height: 100dvh; /* dvh se adapta dinámicamente a la barra de Safari en iOS */
+      overflow: hidden; 
+      font-family: -apple-system, BlinkMacSystemFont, 'Courier New', Courier, monospace;
       background: #0f0f11;
       color: #e1e1e6;
-      padding: 15px;
-      user-select: none;
-    }
-    .console-frame {
-      max-width: 1200px;
-      margin: 0 auto;
-      background: var(--rack-bg);
-      border: 4px solid var(--panel-border);
-      border-left: 14px solid var(--wood-side);
-      border-right: 14px solid var(--wood-side);
-      border-radius: 8px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.8);
-      padding: 15px;
-    }
-    .header-panel {
-      background: linear-gradient(180deg, #32353c 0%, #222429 100%);
-      border: 2px solid #111;
-      border-radius: 6px;
-      padding: 12px;
-      margin-bottom: 15px;
       display: flex;
-      justify-content: space-between;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 10px;
+      flex-direction: column;
+      user-select: none; /* Evita seleccionar texto al tocar */
+      -webkit-user-select: none;
     }
-    .display-screen {
-      background: var(--screen-bg);
-      border: 2px inset #111;
-      color: var(--screen-text);
-      padding: 6px 12px;
-      font-family: monospace;
-      font-size: 1rem;
-      border-radius: 4px;
-      text-shadow: 0 0 5px var(--screen-text);
-      min-width: 200px;
-      text-align: center;
-    }
-    .rack-btn {
-      background: linear-gradient(180deg, #4c505c 0%, #2c2e35 100%);
-      color: #fff;
-      border: 2px solid #111;
-      padding: 8px 14px;
-      border-radius: 4px;
-      font-weight: bold;
-      cursor: pointer;
-      text-transform: uppercase;
-      font-size: 0.75rem;
-    }
-    .rack-btn.accent {
-      background: linear-gradient(180deg, #b33939 0%, #841515 100%);
-      color: #ffdae0;
-    }
-    select {
-      background: #111;
-      color: var(--accent-gold);
-      border: 1px solid #444;
-      padding: 5px;
-      border-radius: 4px;
-    }
-    .ruler-container {
-      margin-left: 250px;
-      background: #111;
-      height: 22px;
-      border: 1px solid #333;
-      position: relative;
-      margin-bottom: 10px;
-      overflow: hidden;
-    }
-    .ruler-mark {
-      position: absolute;
-      top: 0;
-      bottom: 0;
-      border-left: 1px solid #555;
-      font-size: 9px;
-      color: #aaa;
-      padding-left: 2px;
-    }
-    .track-container { display: flex; flex-direction: column; gap: 10px; }
-    .track-strip {
-      background: linear-gradient(180deg, var(--panel-bg) 0%, #1f2024 100%);
-      border: 2px solid #111;
-      border-radius: 4px;
-      display: grid;
-      grid-template-columns: 230px 1fr 25px;
-      gap: 10px;
+
+    /* Panel superior compacto */
+    .header-panel {
+      background: #1a1c20;
+      border-bottom: 2px solid #000;
       padding: 8px;
-      align-items: center;
-    }
-    .track-controls {
-      background: #191a1d;
-      padding: 8px;
-      border: 1px solid #333;
-      border-radius: 4px;
+      flex-shrink: 0;
       display: flex;
       flex-direction: column;
       gap: 6px;
+      z-index: 30;
     }
-    .btn-led-group { display: flex; gap: 6px; }
-    .led-btn {
+    .header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 5px;
+    }
+    .display-screen {
+      background: #0d130e;
+      color: var(--screen-text);
+      padding: 4px 8px;
+      font-size: 0.8rem;
+      border-radius: 4px;
+      text-align: center;
       flex: 1;
-      padding: 4px;
-      font-size: 0.65rem;
-      background: #222;
-      color: #888;
-      border: 1px solid #000;
-      cursor: pointer;
-    }
-    .led-btn.active-mute { background: var(--led-red); color: #fff; }
-    .led-btn.active-solo { background: var(--led-yellow); color: #000; font-weight: bold; }
-    .track-timeline {
-      position: relative;
-      background: #0a0a0c;
-      height: 75px;
-      border: 2px inset #111;
-      overflow: hidden;
-    }
-    .track-timeline.dragover { border-color: var(--accent-gold); background: #141714; }
-    .audio-clip {
-      position: absolute;
-      top: 3px;
-      height: 65px;
-      background: linear-gradient(180deg, #2b580c 0%, #639a67 100%);
-      border: 1px solid #a8df8e;
-      border-radius: 3px;
-      color: #fff;
-      font-size: 0.7rem;
-      padding: 4px;
-      cursor: grab;
-      box-sizing: border-box;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+    }
+    .rack-btn {
+      background: #3a3d45;
+      color: #fff;
+      border: 1px solid #111;
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-weight: bold;
+      font-size: 0.75rem;
+      touch-action: manipulation;
+    }
+    .rack-btn.accent { background: #841515; }
+    
+    select {
+      background: #111; color: var(--accent-gold);
+      border: 1px solid #444; padding: 4px; font-size: 0.75rem;
+    }
+
+    /* Espacio de trabajo (Scrollable) */
+    .workspace {
+      flex: 1;
+      overflow: auto;
+      position: relative;
+      background: #141518;
+      -webkit-overflow-scrolling: touch; /* Scroll suave en iOS */
+    }
+
+    /* Regla de tiempo pegajosa en la parte superior */
+    .ruler-wrapper {
+      position: sticky;
+      top: 0;
+      left: var(--controls-width);
+      z-index: 20;
+      height: 20px;
+      background: #111;
+      border-bottom: 1px solid #333;
+      width: max-content;
+    }
+    .ruler-container {
+      position: relative;
+      height: 100%;
+    }
+    .ruler-mark {
+      position: absolute;
+      top: 0; bottom: 0;
+      border-left: 1px solid #555;
+      font-size: 10px;
+      color: #aaa;
+      padding-left: 2px;
+    }
+
+    /* Pistas */
+    .track-strip {
+      display: flex;
+      width: max-content;
+      border-bottom: 2px solid #000;
+    }
+
+    /* Controles pegajosos a la izquierda */
+    .track-controls {
+      width: var(--controls-width);
+      height: var(--track-height);
+      position: sticky;
+      left: 0;
       z-index: 10;
+      background: var(--panel-bg);
+      border-right: 2px solid #000;
+      padding: 5px;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    
+    .file-input {
+      width: 100%;
+      font-size: 0.6rem;
+      color: transparent; /* Oculta el texto por defecto feo */
+    }
+    .file-input::-webkit-file-upload-button {
+      background: #444; color: white; border: none; padding: 4px; border-radius: 3px; width: 100%;
+    }
+
+    .btn-led-group { display: flex; gap: 4px; }
+    .led-btn {
+      flex: 1; padding: 4px 0; font-size: 0.65rem; background: #222; color: #888; border: 1px solid #000;
+    }
+    .led-btn.active-mute { background: var(--led-red); color: #fff; }
+    .led-btn.active-solo { background: var(--led-yellow); color: #000; }
+
+    .slider-row {
+      display: flex; justify-content: space-between; align-items: center; font-size: 0.6rem;
+    }
+    input[type="range"] { width: 75px; }
+
+    /* Línea de tiempo desplazable */
+    .track-timeline {
+      position: relative;
+      height: var(--track-height);
+      background: #0a0a0c;
     }
     .drop-zone-text {
-      position: absolute;
-      width: 100%;
-      text-align: center;
-      top: 28px;
-      font-size: 0.75rem;
-      color: #666;
-      pointer-events: none;
-      z-index: 1;
+      position: absolute; top: 35px; left: 10px; font-size: 0.75rem; color: #666; pointer-events: none;
     }
-    .error-log { color: var(--error-text); font-weight: bold; text-shadow: none; }
-    .remove-btn { background: none; border: none; color: #666; font-weight: bold; cursor: pointer; font-size: 1.2rem; }
-    .remove-btn:hover { color: var(--led-red); }
-    input[type="file"] { max-width: 140px; }
+
+    /* Clip de audio adaptado para toques */
+    .audio-clip {
+      position: absolute;
+      top: 5px;
+      height: 80px;
+      background: linear-gradient(180deg, #2b580c 0%, #639a67 100%);
+      border: 1px solid #a8df8e;
+      border-radius: 4px;
+      color: #fff;
+      font-size: 0.7rem;
+      padding: 4px;
+      box-sizing: border-box;
+      white-space: nowrap;
+      overflow: hidden;
+      touch-action: none; /* Crucial: Evita que al arrastrar el clip, se mueva la pantalla */
+      z-index: 5;
+    }
+    
+    .remove-btn {
+      position: absolute; right: 2px; top: 2px; background: rgba(0,0,0,0.5); border: none; color: white; border-radius: 50%; width: 20px; height: 20px; font-size: 10px; z-index: 10;
+    }
   </style>
   <script src="https://unpkg.com/wavefile"></script>
 </head>
 <body>
 
-<div class="console-frame">
-  <div class="header-panel">
-    <div style="display:flex; gap:8px; align-items:center;">
-      <button class="rack-btn" id="addTrackBtn">+ Nueva Pista</button>
-      <button class="rack-btn" id="playBtn">▶ / ❚❚ Play</button>
-      <div class="display-screen" id="statusDisplay">SYSTEM READY</div>
-    </div>
-
-    <div style="display:flex; gap:10px; align-items:center;">
-      <label>Rate:
-        <select id="sampleRateSelect">
-          <option value="48000">48000 Hz</option>
-          <option value="44100">44100 Hz</option>
-        </select>
-      </label>
-
-      <label>Depth:
-        <select id="bitDepthSelect">
-          <option value="16">16-Bit</option>
-          <option value="24">24-Bit</option>
-          <option value="32f">32-Bit Float</option>
-        </select>
-      </label>
-
-      <button class="rack-btn accent" id="exportBtn">Export WAV</button>
-    </div>
+<div class="header-panel">
+  <div class="header-row">
+    <button class="rack-btn" id="addTrackBtn">+ Pista</button>
+    <div class="display-screen" id="statusDisplay">READY</div>
+    <button class="rack-btn" id="playBtn">▶ / ❚❚</button>
   </div>
+  <div class="header-row">
+    <select id="sampleRateSelect">
+      <option value="48000">48kHz</option>
+      <option value="44100">44.1kHz</option>
+    </select>
+    <select id="bitDepthSelect">
+      <option value="16">16-Bit</option>
+      <option value="24">24-Bit</option>
+    </select>
+    <button class="rack-btn accent" id="exportBtn">Exportar</button>
+  </div>
+</div>
 
-  <div class="ruler-container" id="ruler"></div>
-  <div class="track-container" id="trackContainer"></div>
+<div class="workspace">
+  <!-- Regla con posición pegajosa -->
+  <div class="ruler-wrapper">
+    <div class="ruler-container" id="ruler"></div>
+  </div>
+  
+  <!-- Contenedor de pistas -->
+  <div id="trackContainer"></div>
 </div>
 
 <script>
   const MAX_MINUTES = 80;
   const MAX_DURATION_SEC = MAX_MINUTES * 60;
-  const PIXELS_PER_SECOND = 0.25;
+  // Reducimos los pixeles por segundo para que la línea de tiempo no sea colosal en móvil
+  const PIXELS_PER_SECOND = 1.5; 
+  const TIMELINE_WIDTH = MAX_DURATION_SEC * PIXELS_PER_SECOND;
 
   let audioCtx = null;
   let tracks = [];
   let isPlaying = false;
   let activeSources = [];
 
-  // Dibujar regla de 80 minutos
+  // Dibujar regla
   const ruler = document.getElementById('ruler');
-  for (let min = 0; min <= MAX_MINUTES; min += 10) {
+  ruler.style.width = `${TIMELINE_WIDTH}px`;
+  for (let min = 0; min <= MAX_MINUTES; min += 1) { // Marcas cada minuto
     const mark = document.createElement('div');
     mark.className = 'ruler-mark';
     mark.style.left = `${(min * 60) * PIXELS_PER_SECOND}px`;
-    mark.innerText = `${min}m`;
+    if (min % 5 === 0) mark.innerText = `${min}m`;
     ruler.appendChild(mark);
   }
 
-  // Despertar AudioContext de forma síncrona en el primer clic
   function initAudioContext() {
     if (!audioCtx) {
       const AudioContext = window.AudioContext || window.webkitAudioContext;
       audioCtx = new AudioContext();
     }
-    if (audioCtx.state === 'suspended') {
-      audioCtx.resume();
-    }
+    if (audioCtx.state === 'suspended') audioCtx.resume();
     return audioCtx;
   }
-
-  // Forzar inicialización en cualquier interacción global para evitar bloqueos en iOS/Safari
+  document.body.addEventListener('touchstart', initAudioContext, { once: true });
   document.body.addEventListener('click', initAudioContext, { once: true });
 
   document.getElementById('addTrackBtn').addEventListener('click', addTrack);
   document.getElementById('playBtn').addEventListener('click', togglePlay);
   document.getElementById('exportBtn').addEventListener('click', exportWav);
 
-  // Agregar la primera pista por defecto
   addTrack();
 
   function addTrack() {
@@ -258,80 +267,45 @@
 
     trackDiv.innerHTML = `
       <div class="track-controls">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-          <strong style="color:var(--accent-gold); font-size:0.75rem;">CH ${tracks.length + 1}</strong>
+        <div style="color:var(--accent-gold); font-size:0.75rem; font-weight:bold; text-align:center;">
+          CH ${tracks.length + 1}
         </div>
-        <!-- Botón de archivo nativo -->
-        <input type="file" accept="audio/*" class="file-input" style="font-size:0.6rem; color:#fff;">
+        <input type="file" accept="audio/*" class="file-input">
         
-        <div class="btn-led-group" style="margin-top: 5px;">
-          <button class="led-btn mute-btn">MUTE</button>
-          <button class="led-btn solo-btn">SOLO</button>
+        <div class="btn-led-group">
+          <button class="led-btn mute-btn">M</button>
+          <button class="led-btn solo-btn">S</button>
         </div>
-        <div style="display:flex; justify-content:space-between; font-size:0.65rem; margin-top:5px;">
-          <span>VOL</span>
-          <input type="range" class="vol-slider" min="0" max="1" step="0.01" value="1" style="width:110px;">
+        <div class="slider-row">
+          <span>V</span>
+          <input type="range" class="vol-slider" min="0" max="1" step="0.01" value="1">
         </div>
-        <div style="display:flex; justify-content:space-between; font-size:0.65rem;">
-          <span>PAN</span>
-          <input type="range" class="pan-slider" min="-1" max="1" step="0.01" value="0" style="width:110px;">
+        <div class="slider-row">
+          <span>P</span>
+          <input type="range" class="pan-slider" min="-1" max="1" step="0.01" value="0">
         </div>
       </div>
 
-      <div class="track-timeline" id="timeline-${trackId}">
-        <span class="drop-zone-text" id="status-${trackId}">Selecciona un audio en el botón izquierdo</span>
+      <div class="track-timeline" id="timeline-${trackId}" style="width: ${TIMELINE_WIDTH}px;">
+        <span class="drop-zone-text" id="status-${trackId}">Toca 'Elegir archivo'</span>
       </div>
-
-      <button class="remove-btn" onclick="removeTrack(${trackId})">✕</button>
     `;
 
     document.getElementById('trackContainer').appendChild(trackDiv);
 
     const trackObj = {
-      id: trackId,
-      buffer: null,
-      gainNode: null,
-      panNode: null,
-      volume: 1,
-      pan: 0,
-      startTime: 0,
-      isMuted: false,
-      isSolo: false
+      id: trackId, buffer: null, gainNode: null, panNode: null, 
+      volume: 1, pan: 0, startTime: 0, isMuted: false, isSolo: false
     };
-
     tracks.push(trackObj);
 
-    // Event listeners de la pista
     const fileInput = trackDiv.querySelector('.file-input');
-    const timeline = trackDiv.querySelector('.track-timeline');
-
-    // 1. Carga por Botón (Input File)
     fileInput.addEventListener('change', (e) => {
-      if (e.target.files.length > 0) {
-        processAudioFile(e.target.files[0], trackObj);
-      }
+      if (e.target.files.length > 0) processAudioFile(e.target.files[0], trackObj);
     });
 
-    // 2. Carga por Drag & Drop
-    timeline.addEventListener('dragover', (e) => { 
-      e.preventDefault(); 
-      timeline.classList.add('dragover'); 
-    });
-    timeline.addEventListener('dragleave', () => {
-      timeline.classList.remove('dragover');
-    });
-    timeline.addEventListener('drop', (e) => {
-      e.preventDefault();
-      timeline.classList.remove('dragover');
-      if (e.dataTransfer.files.length > 0) {
-        processAudioFile(e.dataTransfer.files[0], trackObj);
-      }
-    });
-
-    // Controles de volumen, paneo, mute, solo
     trackDiv.querySelector('.vol-slider').addEventListener('input', (e) => {
-      trackObj.volume = parseFloat(e.target.value);
-      updateGains();
+      trackObj.volume = parseFloat(e.target.value); updateGains();
     });
     trackDiv.querySelector('.pan-slider').addEventListener('input', (e) => {
       trackObj.pan = parseFloat(e.target.value);
@@ -353,20 +327,15 @@
     });
   }
 
-  // --- MOTOR DE CARGA BLINDADO ---
   async function processAudioFile(file, trackObj) {
     const statusText = document.getElementById(`status-${trackObj.id}`);
     const globalScreen = document.getElementById('statusDisplay');
     
     try {
-      // Paso 1: Inicialización
-      statusText.innerText = "[1/3] Preparando entorno...";
-      statusText.classList.remove("error-log");
-      
+      statusText.innerText = "Preparando...";
       const ctx = initAudioContext();
-      if (!ctx) throw new Error("AudioContext no soportado en este navegador.");
+      if (!ctx) throw new Error("AudioContext bloqueado.");
 
-      // Crear nodos si no existen
       if (!trackObj.gainNode) {
         trackObj.gainNode = ctx.createGain();
         trackObj.panNode = ctx.createStereoPanner();
@@ -374,50 +343,47 @@
         trackObj.panNode.connect(ctx.destination);
       }
 
-      // Paso 2: Lectura
-      statusText.innerText = `[2/3] Leyendo: ${file.name}...`;
-      globalScreen.innerText = "READING MEMORY...";
+      statusText.innerText = "Leyendo...";
+      globalScreen.innerText = "MEMORIA...";
       const arrayBuffer = await file.arrayBuffer();
 
-      // Paso 3: Decodificación (Usamos callbacks explícitos para no romper iOS/Safari)
-      statusText.innerText = "[3/3] Decodificando (puede tardar si es largo)...";
-      globalScreen.innerText = "DECODING PCM...";
+      statusText.innerText = "Decodificando...";
+      globalScreen.innerText = "DECODIFICANDO...";
 
       const decodedData = await new Promise((resolve, reject) => {
-        ctx.decodeAudioData(
-          arrayBuffer,
-          (buffer) => resolve(buffer),
-          (error) => reject(new Error("Formato inválido o falta de RAM. " + (error ? error.message : "")))
-        );
+        ctx.decodeAudioData(arrayBuffer, resolve, err => reject(new Error("Formato inválido o RAM llena.")));
       });
 
-      // Validación de 80 minutos
-      if (decodedData.duration > MAX_DURATION_SEC) {
-        throw new Error("El archivo excede el límite de 80 minutos.");
-      }
-
-      // Éxito
       trackObj.buffer = decodedData;
       renderClip(trackObj.id, file.name, decodedData.duration);
-      globalScreen.innerText = "FILE LOADED OK";
+      globalScreen.innerText = "CARGA OK";
 
     } catch (err) {
-      console.error(err);
       statusText.innerText = `ERROR: ${err.message}`;
-      statusText.classList.add("error-log");
-      globalScreen.innerText = "SYSTEM ERROR";
+      statusText.style.color = 'var(--led-red)';
+      globalScreen.innerText = "ERROR";
     }
   }
 
   function renderClip(trackId, name, duration) {
     const timeline = document.getElementById(`timeline-${trackId}`);
-    
-    // Limpiar clíps anteriores, pero conservar el texto de estado por si acaso
     Array.from(timeline.querySelectorAll('.audio-clip')).forEach(el => el.remove());
 
     const clip = document.createElement('div');
     clip.className = 'audio-clip';
-    clip.innerText = `░ ${name}`;
+    
+    // Botón de eliminar interno para móvil
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'remove-btn';
+    removeBtn.innerText = 'X';
+    removeBtn.onclick = (e) => {
+      e.stopPropagation();
+      removeTrack(trackId);
+    };
+
+    clip.appendChild(removeBtn);
+    clip.appendChild(document.createTextNode(`░ ${name}`));
+    
     clip.style.width = `${duration * PIXELS_PER_SECOND}px`;
     clip.style.left = '0px';
 
@@ -425,29 +391,30 @@
     let startX = 0;
     let initialLeft = 0;
 
-    clip.addEventListener('mousedown', (e) => {
+    // EVENTOS TÁCTILES PARA SMARTPHONES
+    clip.addEventListener('touchstart', (e) => {
       isDragging = true;
-      startX = e.clientX;
+      startX = e.touches[0].clientX;
       initialLeft = parseFloat(clip.style.left) || 0;
-    });
+      e.stopPropagation(); 
+    }, {passive: false});
 
-    window.addEventListener('mousemove', (e) => {
+    window.addEventListener('touchmove', (e) => {
       if (!isDragging) return;
-      let newLeft = initialLeft + (e.clientX - startX);
+      let newLeft = initialLeft + (e.touches[0].clientX - startX);
       if (newLeft < 0) newLeft = 0;
 
-      const maxLeft = MAX_DURATION_SEC * PIXELS_PER_SECOND - (duration * PIXELS_PER_SECOND);
+      const maxLeft = TIMELINE_WIDTH - (duration * PIXELS_PER_SECOND);
       if (newLeft > maxLeft) newLeft = maxLeft;
 
       clip.style.left = `${newLeft}px`;
       
       const trackObj = tracks.find(t => t.id === trackId);
       if (trackObj) trackObj.startTime = newLeft / PIXELS_PER_SECOND;
-    });
+    }, {passive: false});
 
-    window.addEventListener('mouseup', () => { isDragging = false; });
-    
-    // Ocultar texto de fondo si hay audio
+    window.addEventListener('touchend', () => { isDragging = false; });
+
     const statusText = document.getElementById(`status-${trackId}`);
     if (statusText) statusText.style.display = 'none';
 
@@ -473,12 +440,11 @@
 
   function togglePlay() {
     const ctx = initAudioContext();
-
     if (isPlaying) {
       activeSources.forEach(s => s.stop());
       activeSources = [];
       isPlaying = false;
-      document.getElementById('statusDisplay').innerText = "STOPPED";
+      document.getElementById('statusDisplay').innerText = "STOP";
     } else {
       updateGains();
       tracks.forEach(t => {
@@ -490,7 +456,7 @@
         activeSources.push(source);
       });
       isPlaying = true;
-      document.getElementById('statusDisplay').innerText = "PLAYING...";
+      document.getElementById('statusDisplay').innerText = "PLAY...";
     }
   }
 
@@ -503,23 +469,18 @@
       }
     });
 
-    if (maxEndTime === 0) {
-      alert("Carga al menos un archivo de audio válido.");
-      return;
-    }
+    if (maxEndTime === 0) return alert("Carga un audio primero.");
 
-    document.getElementById('statusDisplay').innerText = "RENDERING WAV...";
-
+    document.getElementById('statusDisplay').innerText = "EXPORTANDO...";
     const targetSampleRate = parseInt(document.getElementById('sampleRateSelect').value);
     const bitDepth = document.getElementById('bitDepthSelect').value;
-
     const renderDuration = Math.min(maxEndTime, MAX_DURATION_SEC);
+    
     const offlineCtx = new OfflineAudioContext(2, renderDuration * targetSampleRate, targetSampleRate);
     const hasSolo = tracks.some(t => t.isSolo);
 
     tracks.forEach(t => {
       if (!t.buffer) return;
-
       let activeVolume = t.volume;
       if (t.isMuted || (hasSolo && !t.isSolo)) activeVolume = 0;
 
@@ -534,25 +495,20 @@
       source.connect(gain);
       gain.connect(pan);
       pan.connect(offlineCtx.destination);
-
       source.start(t.startTime);
     });
 
     const renderedBuffer = await offlineCtx.startRendering();
-    const leftChannel = renderedBuffer.getChannelData(0);
-    const rightChannel = renderedBuffer.getChannelData(1);
-
     const wav = new wavefile.WaveFile();
-    wav.fromScratch(2, targetSampleRate, bitDepth, [leftChannel, rightChannel]);
+    wav.fromScratch(2, targetSampleRate, bitDepth, [renderedBuffer.getChannelData(0), renderedBuffer.getChannelData(1)]);
 
     const blob = new Blob([wav.toBuffer()], { type: 'audio/wav' });
-    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
-    a.download = `mezcla_master_${targetSampleRate}Hz_${bitDepth}bit.wav`;
+    a.href = URL.createObjectURL(blob);
+    a.download = `mezcla_master.wav`;
     a.click();
 
-    document.getElementById('statusDisplay').innerText = "EXPORT COMPLETE";
+    document.getElementById('statusDisplay').innerText = "COMPLETADO";
   }
 </script>
 </body>
