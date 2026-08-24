@@ -1,10 +1,9 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <!-- Bloqueo estricto del zoom para emular una app nativa -->
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Mobile Multitrack Workstation</title>
+  <title>Mobile Workstation - Fix Loading</title>
   <style>
     :root {
       --panel-bg: #2b2d32;
@@ -12,26 +11,24 @@
       --led-red: #ff3b30;
       --led-yellow: #ffcc00;
       --screen-text: #33ff55;
-      --track-height: 90px;
-      --controls-width: 140px;
+      --track-height: 95px;
+      --controls-width: 135px;
     }
-    
-    /* Bloquear el scroll global de la página */
+
     body {
       margin: 0;
       padding: 0;
-      height: 100dvh; /* dvh se adapta dinámicamente a la barra de Safari en iOS */
-      overflow: hidden; 
-      font-family: -apple-system, BlinkMacSystemFont, 'Courier New', Courier, monospace;
+      height: 100dvh;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, monospace;
       background: #0f0f11;
       color: #e1e1e6;
       display: flex;
       flex-direction: column;
-      user-select: none; /* Evita seleccionar texto al tocar */
+      user-select: none;
       -webkit-user-select: none;
     }
 
-    /* Panel superior compacto */
     .header-panel {
       background: #1a1c20;
       border-bottom: 2px solid #000;
@@ -52,13 +49,14 @@
       background: #0d130e;
       color: var(--screen-text);
       padding: 4px 8px;
-      font-size: 0.8rem;
+      font-size: 0.75rem;
       border-radius: 4px;
       text-align: center;
       flex: 1;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      border: 1px solid #222;
     }
     .rack-btn {
       background: #3a3d45;
@@ -71,22 +69,20 @@
       touch-action: manipulation;
     }
     .rack-btn.accent { background: #841515; }
-    
+
     select {
       background: #111; color: var(--accent-gold);
       border: 1px solid #444; padding: 4px; font-size: 0.75rem;
     }
 
-    /* Espacio de trabajo (Scrollable) */
     .workspace {
       flex: 1;
       overflow: auto;
       position: relative;
       background: #141518;
-      -webkit-overflow-scrolling: touch; /* Scroll suave en iOS */
+      -webkit-overflow-scrolling: touch;
     }
 
-    /* Regla de tiempo pegajosa en la parte superior */
     .ruler-wrapper {
       position: sticky;
       top: 0;
@@ -97,27 +93,18 @@
       border-bottom: 1px solid #333;
       width: max-content;
     }
-    .ruler-container {
-      position: relative;
-      height: 100%;
-    }
+    .ruler-container { position: relative; height: 100%; }
     .ruler-mark {
-      position: absolute;
-      top: 0; bottom: 0;
-      border-left: 1px solid #555;
-      font-size: 10px;
-      color: #aaa;
-      padding-left: 2px;
+      position: absolute; top: 0; bottom: 0;
+      border-left: 1px solid #555; font-size: 10px; color: #aaa; padding-left: 2px;
     }
 
-    /* Pistas */
     .track-strip {
       display: flex;
       width: max-content;
       border-bottom: 2px solid #000;
     }
 
-    /* Controles pegajosos a la izquierda */
     .track-controls {
       width: var(--controls-width);
       height: var(--track-height);
@@ -126,20 +113,17 @@
       z-index: 10;
       background: var(--panel-bg);
       border-right: 2px solid #000;
-      padding: 5px;
+      padding: 6px;
       box-sizing: border-box;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
     }
-    
+
     .file-input {
       width: 100%;
-      font-size: 0.6rem;
-      color: transparent; /* Oculta el texto por defecto feo */
-    }
-    .file-input::-webkit-file-upload-button {
-      background: #444; color: white; border: none; padding: 4px; border-radius: 3px; width: 100%;
+      font-size: 0.65rem;
+      color: #fff;
     }
 
     .btn-led-group { display: flex; gap: 4px; }
@@ -152,23 +136,23 @@
     .slider-row {
       display: flex; justify-content: space-between; align-items: center; font-size: 0.6rem;
     }
-    input[type="range"] { width: 75px; }
+    input[type="range"] { width: 70px; }
 
-    /* Línea de tiempo desplazable */
     .track-timeline {
       position: relative;
       height: var(--track-height);
       background: #0a0a0c;
     }
     .drop-zone-text {
-      position: absolute; top: 35px; left: 10px; font-size: 0.75rem; color: #666; pointer-events: none;
+      position: absolute; top: 15px; left: 10px; right: 10px;
+      font-size: 0.7rem; color: #888; pointer-events: none;
+      word-break: break-all;
     }
 
-    /* Clip de audio adaptado para toques */
     .audio-clip {
       position: absolute;
       top: 5px;
-      height: 80px;
+      height: 85px;
       background: linear-gradient(180deg, #2b580c 0%, #639a67 100%);
       border: 1px solid #a8df8e;
       border-radius: 4px;
@@ -178,12 +162,13 @@
       box-sizing: border-box;
       white-space: nowrap;
       overflow: hidden;
-      touch-action: none; /* Crucial: Evita que al arrastrar el clip, se mueva la pantalla */
+      touch-action: none;
       z-index: 5;
     }
-    
+
     .remove-btn {
-      position: absolute; right: 2px; top: 2px; background: rgba(0,0,0,0.5); border: none; color: white; border-radius: 50%; width: 20px; height: 20px; font-size: 10px; z-index: 10;
+      position: absolute; right: 2px; top: 2px; background: rgba(0,0,0,0.6);
+      border: none; color: white; border-radius: 50%; width: 22px; height: 22px; font-size: 11px; z-index: 10;
     }
   </style>
   <script src="https://unpkg.com/wavefile"></script>
@@ -193,7 +178,7 @@
 <div class="header-panel">
   <div class="header-row">
     <button class="rack-btn" id="addTrackBtn">+ Pista</button>
-    <div class="display-screen" id="statusDisplay">READY</div>
+    <div class="display-screen" id="statusDisplay">SISTEMA LISTO</div>
     <button class="rack-btn" id="playBtn">▶ / ❚❚</button>
   </div>
   <div class="header-row">
@@ -210,19 +195,15 @@
 </div>
 
 <div class="workspace">
-  <!-- Regla con posición pegajosa -->
   <div class="ruler-wrapper">
     <div class="ruler-container" id="ruler"></div>
   </div>
-  
-  <!-- Contenedor de pistas -->
   <div id="trackContainer"></div>
 </div>
 
 <script>
   const MAX_MINUTES = 80;
   const MAX_DURATION_SEC = MAX_MINUTES * 60;
-  // Reducimos los pixeles por segundo para que la línea de tiempo no sea colosal en móvil
   const PIXELS_PER_SECOND = 1.5; 
   const TIMELINE_WIDTH = MAX_DURATION_SEC * PIXELS_PER_SECOND;
 
@@ -231,10 +212,9 @@
   let isPlaying = false;
   let activeSources = [];
 
-  // Dibujar regla
   const ruler = document.getElementById('ruler');
   ruler.style.width = `${TIMELINE_WIDTH}px`;
-  for (let min = 0; min <= MAX_MINUTES; min += 1) { // Marcas cada minuto
+  for (let min = 0; min <= MAX_MINUTES; min += 1) {
     const mark = document.createElement('div');
     mark.className = 'ruler-mark';
     mark.style.left = `${(min * 60) * PIXELS_PER_SECOND}px`;
@@ -242,16 +222,19 @@
     ruler.appendChild(mark);
   }
 
-  function initAudioContext() {
+  function getAudioContext() {
     if (!audioCtx) {
-      const AudioContext = window.AudioContext || window.webkitAudioContext;
-      audioCtx = new AudioContext();
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new AudioContextClass();
     }
-    if (audioCtx.state === 'suspended') audioCtx.resume();
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
     return audioCtx;
   }
-  document.body.addEventListener('touchstart', initAudioContext, { once: true });
-  document.body.addEventListener('click', initAudioContext, { once: true });
+
+  document.body.addEventListener('touchstart', getAudioContext, { once: true });
+  document.body.addEventListener('click', getAudioContext, { once: true });
 
   document.getElementById('addTrackBtn').addEventListener('click', addTrack);
   document.getElementById('playBtn').addEventListener('click', togglePlay);
@@ -287,7 +270,7 @@
       </div>
 
       <div class="track-timeline" id="timeline-${trackId}" style="width: ${TIMELINE_WIDTH}px;">
-        <span class="drop-zone-text" id="status-${trackId}">Toca 'Elegir archivo'</span>
+        <span class="drop-zone-text" id="status-${trackId}">Selecciona un archivo de audio</span>
       </div>
     `;
 
@@ -301,7 +284,9 @@
 
     const fileInput = trackDiv.querySelector('.file-input');
     fileInput.addEventListener('change', (e) => {
-      if (e.target.files.length > 0) processAudioFile(e.target.files[0], trackObj);
+      if (e.target.files.length > 0) {
+        processAudioFile(e.target.files[0], trackObj);
+      }
     });
 
     trackDiv.querySelector('.vol-slider').addEventListener('input', (e) => {
@@ -327,14 +312,23 @@
     });
   }
 
-  async function processAudioFile(file, trackObj) {
+  // MOTOR DE LECTURA CON FILEREADER (SOPORTE COMPLETO WEBKIT / IOS)
+  function processAudioFile(file, trackObj) {
     const statusText = document.getElementById(`status-${trackObj.id}`);
     const globalScreen = document.getElementById('statusDisplay');
     
-    try {
-      statusText.innerText = "Preparando...";
-      const ctx = initAudioContext();
-      if (!ctx) throw new Error("AudioContext bloqueado.");
+    const fileSizeMB = (file.size / (1024 * 1024)).toFixed(1);
+    statusText.style.color = '#888';
+    statusText.innerText = `Leyendo: ${file.name} (${fileSizeMB}MB)...`;
+    globalScreen.innerText = "LEYENDO ARCHIVO...";
+
+    const reader = new FileReader();
+
+    reader.onload = function(e) {
+      statusText.innerText = "Decodificando audio en WebAudio...";
+      globalScreen.innerText = "DECODIFICANDO PCM...";
+
+      const ctx = getAudioContext();
 
       if (!trackObj.gainNode) {
         trackObj.gainNode = ctx.createGain();
@@ -343,26 +337,35 @@
         trackObj.panNode.connect(ctx.destination);
       }
 
-      statusText.innerText = "Leyendo...";
-      globalScreen.innerText = "MEMORIA...";
-      const arrayBuffer = await file.arrayBuffer();
+      // Decodificación con soporte explícito de Promesa y Callback
+      const arrayBuffer = e.target.result;
 
-      statusText.innerText = "Decodificando...";
-      globalScreen.innerText = "DECODIFICANDO...";
+      ctx.decodeAudioData(
+        arrayBuffer,
+        function(decodedBuffer) {
+          trackObj.buffer = decodedBuffer;
+          renderClip(trackObj.id, file.name, decodedBuffer.duration);
+          globalScreen.innerText = "CARGA EXITOSA";
+        },
+        function(err) {
+          console.error("Decode Error:", err);
+          let errDetail = err ? (err.message || err.name) : "Códec no soportado";
+          statusText.innerText = `ERR DECODE: ${errDetail}. (Safari no lee OGG o FLAC no nativos)`;
+          statusText.style.color = 'var(--led-red)';
+          globalScreen.innerText = "ERROR DECODE";
+        }
+      );
+    };
 
-      const decodedData = await new Promise((resolve, reject) => {
-        ctx.decodeAudioData(arrayBuffer, resolve, err => reject(new Error("Formato inválido o RAM llena.")));
-      });
-
-      trackObj.buffer = decodedData;
-      renderClip(trackObj.id, file.name, decodedData.duration);
-      globalScreen.innerText = "CARGA OK";
-
-    } catch (err) {
-      statusText.innerText = `ERROR: ${err.message}`;
+    reader.onerror = function(err) {
+      console.error("FileReader Error:", err);
+      statusText.innerText = "ERR LECTURA: El navegador bloqueó el archivo local.";
       statusText.style.color = 'var(--led-red)';
-      globalScreen.innerText = "ERROR";
-    }
+      globalScreen.innerText = "ERROR LECTURA";
+    };
+
+    // Iniciar lectura del Blob local
+    reader.readAsArrayBuffer(file);
   }
 
   function renderClip(trackId, name, duration) {
@@ -372,10 +375,9 @@
     const clip = document.createElement('div');
     clip.className = 'audio-clip';
     
-    // Botón de eliminar interno para móvil
     const removeBtn = document.createElement('button');
     removeBtn.className = 'remove-btn';
-    removeBtn.innerText = 'X';
+    removeBtn.innerText = '✕';
     removeBtn.onclick = (e) => {
       e.stopPropagation();
       removeTrack(trackId);
@@ -383,7 +385,6 @@
 
     clip.appendChild(removeBtn);
     clip.appendChild(document.createTextNode(`░ ${name}`));
-    
     clip.style.width = `${duration * PIXELS_PER_SECOND}px`;
     clip.style.left = '0px';
 
@@ -391,7 +392,6 @@
     let startX = 0;
     let initialLeft = 0;
 
-    // EVENTOS TÁCTILES PARA SMARTPHONES
     clip.addEventListener('touchstart', (e) => {
       isDragging = true;
       startX = e.touches[0].clientX;
@@ -439,7 +439,7 @@
   }
 
   function togglePlay() {
-    const ctx = initAudioContext();
+    const ctx = getAudioContext();
     if (isPlaying) {
       activeSources.forEach(s => s.stop());
       activeSources = [];
@@ -456,7 +456,7 @@
         activeSources.push(source);
       });
       isPlaying = true;
-      document.getElementById('statusDisplay').innerText = "PLAY...";
+      document.getElementById('statusDisplay').innerText = "PLAYING...";
     }
   }
 
@@ -469,9 +469,9 @@
       }
     });
 
-    if (maxEndTime === 0) return alert("Carga un audio primero.");
+    if (maxEndTime === 0) return alert("Carga un archivo primero.");
 
-    document.getElementById('statusDisplay').innerText = "EXPORTANDO...";
+    document.getElementById('statusDisplay').innerText = "RENDERING...";
     const targetSampleRate = parseInt(document.getElementById('sampleRateSelect').value);
     const bitDepth = document.getElementById('bitDepthSelect').value;
     const renderDuration = Math.min(maxEndTime, MAX_DURATION_SEC);
