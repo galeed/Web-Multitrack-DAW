@@ -11,6 +11,7 @@
       --accent: #ff4757;
       --text: #e1e1e6;
       --track-bg: #2a2a32;
+      --clip-bg: #4a69bd;
     }
     body {
       margin: 0;
@@ -38,19 +39,48 @@
       cursor: pointer;
     }
     button:hover { background: #3e3e4d; }
+    button.active-mute { background: #e74c3c !important; color: white; }
+    button.active-solo { background: #f1c40f !important; color: black; }
+    
     .track-list { display: flex; flex-direction: column; gap: 10px; }
     .track {
       background: var(--track-bg);
       padding: 12px;
       border-radius: 6px;
       display: grid;
-      grid-template-columns: 200px 1fr 100px;
+      grid-template-columns: 240px 1fr 80px;
       align-items: center;
       gap: 15px;
     }
-    .time-display { font-family: monospace; font-size: 1.2rem; margin-left: auto; }
+    .track-controls { display: flex; flex-direction: column; gap: 8px; }
+    .btn-group { display: flex; gap: 6px; }
+    
+    .timeline {
+      position: relative;
+      background: #18181c;
+      height: 80px;
+      border: 1px dashed #444;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .audio-clip {
+      position: absolute;
+      top: 5px;
+      height: 70px;
+      background: var(--clip-bg);
+      border-radius: 4px;
+      color: white;
+      font-size: 0.8rem;
+      padding: 4px 8px;
+      cursor: grab;
+      user-select: none;
+      box-sizing: border-box;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .audio-clip:active { cursor: grabbing; opacity: 0.8; }
   </style>
-  <!-- Librería para codificación fácil de WAV 16/24/32 bits -->
   <script src="https://unpkg.com/wavefile"></script>
 </head>
 <body>
@@ -77,17 +107,17 @@
     </label>
 
     <button id="exportBtn" style="background: var(--accent);">Exportar Mezcla</button>
-    <div class="time-display" id="timeDisplay">00:00 / 80:00</div>
   </div>
 
   <div class="track-list" id="trackContainer"></div>
 
 <script>
-  const MAX_DURATION_SEC = 80 * 60; // Límite de 80 minutos
+  const MAX_DURATION_SEC = 80 * 60; // 80 minutos
+  const PIXELS_PER_SECOND = 10; // Escala visual de la línea de tiempo
   let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   let tracks = [];
   let isPlaying = false;
-  let startTime = 0;
+  let activeSources = [];
 
   const trackContainer = document.getElementById('trackContainer');
 
@@ -102,14 +132,17 @@
     trackDiv.id = `track-${trackId}`;
 
     trackDiv.innerHTML = `
-      <div>
-        <strong>Pista ${tracks.length + 1}</strong><br>
+      <div class="track-controls">
+        <strong>Pista ${tracks.length + 1}</strong>
         <input type="file" accept="audio/*" class="file-input">
-      </div>
-      <div>
+        <div class="btn-group">
+          <button class="mute-btn">Mute</button>
+          <button class="solo-btn">Solo</button>
+        </div>
         <label>Vol: <input type="range" class="vol-slider" min="0" max="1" step="0.01" value="1"></label>
         <label>Pan: <input type="range" class="pan-slider" min="-1" max="1" step="0.01" value="0"></label>
       </div>
+      <div class="timeline" id="timeline-${trackId}"></div>
       <button onclick="removeTrack(${trackId})">Eliminar</button>
     `;
 
@@ -120,16 +153,17 @@
       buffer: null,
       gainNode: audioCtx.createGain(),
       panNode: audioCtx.createStereoPanner(),
-      source: null,
       volume: 1,
-      pan: 0
+      pan: 0,
+      startTime: 0, // Posición en la línea de tiempo (en segundos)
+      isMuted: false,
+      isSolo: false
     };
 
-    // Conectar nodos para esta pista
     trackObj.gainNode.connect(trackObj.panNode);
     trackObj.panNode.connect(audioCtx.destination);
 
-    // Eventos de la GUI
+    // Selección de archivo
     const fileInput = trackDiv.querySelector('.file-input');
     fileInput.addEventListener('change', async (e) => {
       const file = e.target.files[0];
@@ -144,11 +178,13 @@
       }
 
       trackObj.buffer = decodedData;
+      renderClip(trackId, file.name, decodedData.duration);
     });
 
+    // Controles de volumen y pan
     trackDiv.querySelector('.vol-slider').addEventListener('input', (e) => {
       trackObj.volume = parseFloat(e.target.value);
-      trackObj.gainNode.gain.value = trackObj.volume;
+      updateGainNodes();
     });
 
     trackDiv.querySelector('.pan-slider').addEventListener('input', (e) => {
@@ -156,27 +192,103 @@
       trackObj.panNode.pan.value = trackObj.pan;
     });
 
+    // Botones Mute y Solo
+    const muteBtn = trackDiv.querySelector('.mute-btn');
+    muteBtn.addEventListener('click', () => {
+      trackObj.isMuted = !trackObj.isMuted;
+      muteBtn.classList.toggle('active-mute', trackObj.isMuted);
+      updateGainNodes();
+    });
+
+    const soloBtn = trackDiv.querySelector('.solo-btn');
+    soloBtn.addEventListener('click', () => {
+      trackObj.isSolo = !trackObj.isSolo;
+      soloBtn.classList.toggle('active-solo', trackObj.isSolo);
+      updateGainNodes();
+    });
+
     tracks.push(trackObj);
+  }
+
+  function renderClip(trackId, name, duration) {
+    const timeline = document.getElementById(`timeline-${trackId}`);
+    timeline.innerHTML = '';
+
+    const clip = document.createElement('div');
+    clip.className = 'audio-clip';
+    clip.innerText = name;
+    clip.style.width = `${duration * PIXELS_PER_SECOND}px`;
+    clip.style.left = '0px';
+
+    // Eventos para arrastrar el clip (desplazamiento temporal)
+    let isDragging = false;
+    let startX = 0;
+    let initialLeft = 0;
+
+    clip.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      startX = e.clientX;
+      initialLeft = parseFloat(clip.style.left) || 0;
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      const deltaX = e.clientX - startX;
+      let newLeft = initialLeft + deltaX;
+      if (newLeft < 0) newLeft = 0;
+
+      clip.style.left = `${newLeft}px`;
+      
+      const trackObj = tracks.find(t => t.id === trackId);
+      if (trackObj) {
+        trackObj.startTime = newLeft / PIXELS_PER_SECOND;
+      }
+    });
+
+    window.addEventListener('mouseup', () => { isDragging = false; });
+    timeline.appendChild(clip);
+  }
+
+  function updateGainNodes() {
+    const hasSolo = tracks.some(t => t.isSolo);
+
+    tracks.forEach(t => {
+      let activeGain = t.volume;
+
+      if (t.isMuted) {
+        activeGain = 0;
+      } else if (hasSolo && !t.isSolo) {
+        activeGain = 0;
+      }
+
+      t.gainNode.gain.value = activeGain;
+    });
   }
 
   function removeTrack(id) {
     tracks = tracks.filter(t => t.id !== id);
     document.getElementById(`track-${id}`).remove();
+    updateGainNodes();
   }
 
   function togglePlay() {
     if (audioCtx.state === 'suspended') audioCtx.resume();
 
     if (isPlaying) {
-      tracks.forEach(t => t.source && t.source.stop());
+      activeSources.forEach(s => s.stop());
+      activeSources = [];
       isPlaying = false;
     } else {
+      updateGainNodes();
       tracks.forEach(t => {
         if (!t.buffer) return;
-        t.source = audioCtx.createBufferSource();
-        t.source.buffer = t.buffer;
-        t.source.connect(t.gainNode);
-        t.source.start(0);
+        const source = audioCtx.createBufferSource();
+        source.buffer = t.buffer;
+        source.connect(t.gainNode);
+        
+        // Inicia el audio respetando el offset configurado en el timeline
+        source.start(audioCtx.currentTime + t.startTime);
+        activeSources.push(source);
       });
       isPlaying = true;
     }
@@ -186,52 +298,54 @@
     const targetSampleRate = parseInt(document.getElementById('sampleRateSelect').value);
     const bitDepth = document.getElementById('bitDepthSelect').value;
 
-    // Calcular la duración máxima entre todas las pistas activas (máx 80 min)
-    let maxDuration = 0;
+    let maxEndTime = 0;
     tracks.forEach(t => {
-      if (t.buffer && t.buffer.duration > maxDuration) {
-        maxDuration = t.buffer.duration;
+      if (t.buffer) {
+        const endTime = t.startTime + t.buffer.duration;
+        if (endTime > maxEndTime) maxEndTime = endTime;
       }
     });
 
-    if (maxDuration === 0) {
+    if (maxEndTime === 0) {
       alert("Carga al menos un archivo de audio para exportar.");
       return;
     }
 
-    const renderDuration = Math.min(maxDuration, MAX_DURATION_SEC);
-    
-    // Renderizado Offline (más rápido que tiempo real)
+    const renderDuration = Math.min(maxEndTime, MAX_DURATION_SEC);
     const offlineCtx = new OfflineAudioContext(2, renderDuration * targetSampleRate, targetSampleRate);
+
+    const hasSolo = tracks.some(t => t.isSolo);
 
     tracks.forEach(t => {
       if (!t.buffer) return;
+
+      let activeVolume = t.volume;
+      if (t.isMuted || (hasSolo && !t.isSolo)) {
+        activeVolume = 0;
+      }
+
       const source = offlineCtx.createBufferSource();
       const gain = offlineCtx.createGain();
       const pan = offlineCtx.createStereoPanner();
 
       source.buffer = t.buffer;
-      gain.gain.value = t.volume;
+      gain.gain.value = activeVolume;
       pan.pan.value = t.pan;
 
       source.connect(gain);
       gain.connect(pan);
       pan.connect(offlineCtx.destination);
 
-      source.start(0);
+      source.start(t.startTime);
     });
 
     const renderedBuffer = await offlineCtx.startRendering();
-
-    // Extraer canales estéreo
     const leftChannel = renderedBuffer.getChannelData(0);
     const rightChannel = renderedBuffer.getChannelData(1);
 
-    // Formatear archivo WAV usando wavefile
     const wav = new wavefile.WaveFile();
     wav.fromScratch(2, targetSampleRate, bitDepth, [leftChannel, rightChannel]);
 
-    // Descargar
     const blob = new Blob([wav.toBuffer()], { type: 'audio/wav' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
