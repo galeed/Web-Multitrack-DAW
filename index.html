@@ -3,117 +3,234 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Web Multitrack DAW</title>
+  <title>Analog Multitrack Workstation</title>
   <style>
     :root {
-      --bg: #121214;
-      --panel: #1e1e24;
-      --accent: #ff4757;
-      --text: #e1e1e6;
-      --track-bg: #2a2a32;
-      --clip-bg: #4a69bd;
+      --rack-bg: #1a1b1e;
+      --panel-bg: #2b2d32;
+      --panel-border: #3a3d45;
+      --wood-side: #4a2810;
+      --accent-gold: #d4af37;
+      --led-red: #ff3b30;
+      --led-yellow: #ffcc00;
+      --led-green: #34c759;
+      --screen-bg: #0d130e;
+      --screen-text: #33ff55;
     }
     body {
       margin: 0;
-      font-family: system-ui, -apple-system, sans-serif;
-      background: var(--bg);
-      color: var(--text);
+      font-family: 'Courier New', Courier, monospace;
+      background: #0f0f11;
+      color: #e1e1e6;
+      padding: 20px;
+      user-select: none;
+    }
+    .console-frame {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: var(--rack-bg);
+      border: 4px solid var(--panel-border);
+      border-left: 16px solid var(--wood-side);
+      border-right: 16px solid var(--wood-side);
+      border-radius: 8px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.8);
       padding: 20px;
     }
-    .controls {
-      display: flex;
-      gap: 12px;
+    .header-panel {
+      background: linear-gradient(180deg, #32353c 0%, #222429 100%);
+      border: 2px solid #111;
+      border-radius: 6px;
+      padding: 15px;
       margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
       align-items: center;
       flex-wrap: wrap;
-      background: var(--panel);
-      padding: 15px;
-      border-radius: 8px;
-    }
-    button, select, input {
-      background: #32323e;
-      color: var(--text);
-      border: 1px solid #444452;
-      padding: 8px 16px;
-      border-radius: 6px;
-      cursor: pointer;
-    }
-    button:hover { background: #3e3e4d; }
-    button.active-mute { background: #e74c3c !important; color: white; }
-    button.active-solo { background: #f1c40f !important; color: black; }
-    
-    .track-list { display: flex; flex-direction: column; gap: 10px; }
-    .track {
-      background: var(--track-bg);
-      padding: 12px;
-      border-radius: 6px;
-      display: grid;
-      grid-template-columns: 240px 1fr 80px;
-      align-items: center;
       gap: 15px;
     }
-    .track-controls { display: flex; flex-direction: column; gap: 8px; }
-    .btn-group { display: flex; gap: 6px; }
-    
-    .timeline {
-      position: relative;
-      background: #18181c;
-      height: 80px;
-      border: 1px dashed #444;
+    .display-screen {
+      background: var(--screen-bg);
+      border: 3px inset #111;
+      color: var(--screen-text);
+      padding: 8px 15px;
+      font-family: monospace;
+      font-size: 1.1rem;
       border-radius: 4px;
+      text-shadow: 0 0 5px var(--screen-text);
+    }
+    .rack-btn {
+      background: linear-gradient(180deg, #4c505c 0%, #2c2e35 100%);
+      color: #fff;
+      border: 2px solid #111;
+      padding: 8px 16px;
+      border-radius: 4px;
+      font-weight: bold;
+      cursor: pointer;
+      text-transform: uppercase;
+      font-size: 0.8rem;
+      letter-spacing: 1px;
+      box-shadow: 0 3px 0 #111;
+    }
+    .rack-btn:active {
+      transform: translateY(2px);
+      box-shadow: 0 1px 0 #111;
+    }
+    .rack-btn.accent {
+      background: linear-gradient(180deg, #b33939 0%, #841515 100%);
+      color: #ffdae0;
+    }
+    select, input[type="file"] {
+      background: #111;
+      color: var(--accent-gold);
+      border: 1px solid #444;
+      padding: 6px;
+      border-radius: 4px;
+      font-family: monospace;
+    }
+    /* Regla Global de 80 Minutos */
+    .ruler-container {
+      margin-left: 260px;
+      background: #111;
+      height: 26px;
+      border: 1px solid #333;
+      position: relative;
+      margin-bottom: 10px;
       overflow: hidden;
+    }
+    .ruler-mark {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      border-left: 1px solid #555;
+      font-size: 9px;
+      color: #aaa;
+      padding-left: 3px;
+    }
+    .track-container { display: flex; flex-direction: column; gap: 12px; }
+    .track-strip {
+      background: linear-gradient(180deg, var(--panel-bg) 0%, #1f2024 100%);
+      border: 2px solid #111;
+      border-radius: 4px;
+      display: grid;
+      grid-template-columns: 240px 1fr 20px;
+      gap: 15px;
+      padding: 10px;
+      align-items: center;
+    }
+    .track-controls {
+      background: #191a1d;
+      padding: 10px;
+      border: 1px solid #333;
+      border-radius: 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .rotary-group { display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; }
+    .btn-led-group { display: flex; gap: 8px; }
+    .led-btn {
+      flex: 1;
+      padding: 4px;
+      font-size: 0.7rem;
+      background: #222;
+      color: #888;
+      border: 1px solid #000;
+      cursor: pointer;
+    }
+    .led-btn.active-mute { background: var(--led-red); color: #fff; text-shadow: 0 0 5px #fff; }
+    .led-btn.active-solo { background: var(--led-yellow); color: #000; font-weight: bold; }
+    
+    /* Timeline de Pista */
+    .track-timeline {
+      position: relative;
+      background: #0a0a0c;
+      height: 80px;
+      border: 2px inset #111;
+      overflow: hidden;
+    }
+    .track-timeline.dragover {
+      border-color: var(--accent-gold);
+      background: #141714;
     }
     .audio-clip {
       position: absolute;
-      top: 5px;
-      height: 70px;
-      background: var(--clip-bg);
-      border-radius: 4px;
-      color: white;
-      font-size: 0.8rem;
-      padding: 4px 8px;
+      top: 4px;
+      height: 68px;
+      background: linear-gradient(180deg, #2b580c 0%, #639a67 100%);
+      border: 1px solid #a8df8e;
+      border-radius: 3px;
+      color: #fff;
+      font-size: 0.75rem;
+      padding: 4px;
       cursor: grab;
-      user-select: none;
       box-sizing: border-box;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.5);
     }
-    .audio-clip:active { cursor: grabbing; opacity: 0.8; }
+    .drop-zone-text {
+      position: absolute;
+      width: 100%;
+      text-align: center;
+      top: 30px;
+      font-size: 0.75rem;
+      color: #555;
+      pointer-events: none;
+    }
+    .remove-btn {
+      background: none;
+      border: none;
+      color: #666;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .remove-btn:hover { color: var(--led-red); }
   </style>
   <script src="https://unpkg.com/wavefile"></script>
 </head>
 <body>
 
-  <h1>Web Multitrack Studio</h1>
+<div class="console-frame">
+  <div class="header-panel">
+    <div style="display:flex; gap:10px; align-items:center;">
+      <button class="rack-btn" id="addTrackBtn">+ Nueva Pista</button>
+      <button class="rack-btn" id="playBtn">▶ / ❚❚ Play</button>
+      <div class="display-screen" id="timeDisplay">00:00:00 / 80:00:00</div>
+    </div>
 
-  <div class="controls">
-    <button id="addTrackBtn">+ Añadir Pista</button>
-    <button id="playBtn">Play / Pause</button>
-    
-    <label>Sample Rate:
-      <select id="sampleRateSelect">
-        <option value="48000">48000 Hz</option>
-        <option value="44100">44100 Hz</option>
-      </select>
-    </label>
+    <div style="display:flex; gap:12px; align-items:center;">
+      <label>Rate:
+        <select id="sampleRateSelect">
+          <option value="48000">48000 Hz</option>
+          <option value="44100">44100 Hz</option>
+        </select>
+      </label>
 
-    <label>Bit Depth:
-      <select id="bitDepthSelect">
-        <option value="16">16-bit PCM</option>
-        <option value="24">24-bit PCM</option>
-        <option value="32f">32-bit Float</option>
-      </select>
-    </label>
+      <label>Depth:
+        <select id="bitDepthSelect">
+          <option value="16">16-Bit PCM</option>
+          <option value="24">24-Bit PCM</option>
+          <option value="32f">32-Bit Float</option>
+        </select>
+      </label>
 
-    <button id="exportBtn" style="background: var(--accent);">Exportar Mezcla</button>
+      <button class="rack-btn accent" id="exportBtn">REC / Export WAV</button>
+    </div>
   </div>
 
-  <div class="track-list" id="trackContainer"></div>
+  <!-- Regla Temporal (0 a 80 Minutos) -->
+  <div class="ruler-container" id="ruler"></div>
+
+  <!-- Pistas Multipista -->
+  <div class="track-container" id="trackContainer"></div>
+</div>
 
 <script>
-  const MAX_DURATION_SEC = 80 * 60; // 80 minutos
-  const PIXELS_PER_SECOND = 10; // Escala visual de la línea de tiempo
+  const MAX_MINUTES = 80;
+  const MAX_DURATION_SEC = MAX_MINUTES * 60; // 4800 segundos
+  const PIXELS_PER_SECOND = 0.25; // 80 min ocupan 1200px de ancho aproximadamente
+
   let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   let tracks = [];
   let isPlaying = false;
@@ -121,29 +238,54 @@
 
   const trackContainer = document.getElementById('trackContainer');
 
+  // Inicializar regla de 80 minutos
+  const ruler = document.getElementById('ruler');
+  for (let min = 0; min <= MAX_MINUTES; min += 10) {
+    const mark = document.createElement('div');
+    mark.className = 'ruler-mark';
+    mark.style.left = `${(min * 60) * PIXELS_PER_SECOND}px`;
+    mark.innerText = `${min}m`;
+    ruler.appendChild(mark);
+  }
+
   document.getElementById('addTrackBtn').addEventListener('click', addTrack);
   document.getElementById('playBtn').addEventListener('click', togglePlay);
   document.getElementById('exportBtn').addEventListener('click', exportWav);
 
+  // Añadir primera pista por defecto
+  addTrack();
+
   function addTrack() {
     const trackId = Date.now();
     const trackDiv = document.createElement('div');
-    trackDiv.className = 'track';
+    trackDiv.className = 'track-strip';
     trackDiv.id = `track-${trackId}`;
 
     trackDiv.innerHTML = `
       <div class="track-controls">
-        <strong>Pista ${tracks.length + 1}</strong>
-        <input type="file" accept="audio/*" class="file-input">
-        <div class="btn-group">
-          <button class="mute-btn">Mute</button>
-          <button class="solo-btn">Solo</button>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <strong style="color:var(--accent-gold); font-size:0.8rem;">CH ${tracks.length + 1}</strong>
+          <input type="file" accept="audio/*" class="file-input" style="width:110px; font-size:0.65rem;">
         </div>
-        <label>Vol: <input type="range" class="vol-slider" min="0" max="1" step="0.01" value="1"></label>
-        <label>Pan: <input type="range" class="pan-slider" min="-1" max="1" step="0.01" value="0"></label>
+        <div class="btn-led-group">
+          <button class="led-btn mute-btn">MUTE</button>
+          <button class="led-btn solo-btn">SOLO</button>
+        </div>
+        <div class="rotary-group">
+          <span>VOL</span>
+          <input type="range" class="vol-slider" min="0" max="1" step="0.01" value="1" style="width:120px;">
+        </div>
+        <div class="rotary-group">
+          <span>PAN</span>
+          <input type="range" class="pan-slider" min="-1" max="1" step="0.01" value="0" style="width:120px;">
+        </div>
       </div>
-      <div class="timeline" id="timeline-${trackId}"></div>
-      <button onclick="removeTrack(${trackId})">Eliminar</button>
+
+      <div class="track-timeline" id="timeline-${trackId}">
+        <span class="drop-zone-text">Arrastra un archivo de audio aquí o usa el botón de carga</span>
+      </div>
+
+      <button class="remove-btn" onclick="removeTrack(${trackId})">✕</button>
     `;
 
     trackContainer.appendChild(trackDiv);
@@ -155,7 +297,7 @@
       panNode: audioCtx.createStereoPanner(),
       volume: 1,
       pan: 0,
-      startTime: 0, // Posición en la línea de tiempo (en segundos)
+      startTime: 0,
       isMuted: false,
       isSolo: false
     };
@@ -163,51 +305,68 @@
     trackObj.gainNode.connect(trackObj.panNode);
     trackObj.panNode.connect(audioCtx.destination);
 
-    // Selección de archivo
+    const timeline = trackDiv.querySelector('.track-timeline');
+
+    // Manejar carga mediante Input File
     const fileInput = trackDiv.querySelector('.file-input');
-    fileInput.addEventListener('change', async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      const arrayBuffer = await file.arrayBuffer();
-      const decodedData = await audioCtx.decodeAudioData(arrayBuffer);
-
-      if (decodedData.duration > MAX_DURATION_SEC) {
-        alert("El archivo excede el límite permitido de 80 minutos.");
-        return;
-      }
-
-      trackObj.buffer = decodedData;
-      renderClip(trackId, file.name, decodedData.duration);
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files[0]) processAudioFile(e.target.files[0], trackObj);
     });
 
-    // Controles de volumen y pan
+    // Manejar carga mediante Drag & Drop directo a la pista
+    timeline.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      timeline.classList.add('dragover');
+    });
+    timeline.addEventListener('dragleave', () => timeline.classList.remove('dragover'));
+    timeline.addEventListener('drop', (e) => {
+      e.preventDefault();
+      timeline.classList.remove('dragover');
+      if (e.dataTransfer.files[0]) processAudioFile(e.dataTransfer.files[0], trackObj);
+    });
+
+    // Controles de volumen/pan/mute/solo
     trackDiv.querySelector('.vol-slider').addEventListener('input', (e) => {
       trackObj.volume = parseFloat(e.target.value);
-      updateGainNodes();
+      updateGains();
     });
-
     trackDiv.querySelector('.pan-slider').addEventListener('input', (e) => {
       trackObj.pan = parseFloat(e.target.value);
       trackObj.panNode.pan.value = trackObj.pan;
     });
 
-    // Botones Mute y Solo
     const muteBtn = trackDiv.querySelector('.mute-btn');
     muteBtn.addEventListener('click', () => {
       trackObj.isMuted = !trackObj.isMuted;
       muteBtn.classList.toggle('active-mute', trackObj.isMuted);
-      updateGainNodes();
+      updateGains();
     });
 
     const soloBtn = trackDiv.querySelector('.solo-btn');
     soloBtn.addEventListener('click', () => {
       trackObj.isSolo = !trackObj.isSolo;
       soloBtn.classList.toggle('active-solo', trackObj.isSolo);
-      updateGainNodes();
+      updateGains();
     });
 
     tracks.push(trackObj);
+  }
+
+  async function processAudioFile(file, trackObj) {
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const decodedData = await audioCtx.decodeAudioData(arrayBuffer);
+
+      if (decodedData.duration > MAX_DURATION_SEC) {
+        alert("El archivo excede el límite máximo de 80 minutos.");
+        return;
+      }
+
+      trackObj.buffer = decodedData;
+      renderClip(trackObj.id, file.name, decodedData.duration);
+    } catch (err) {
+      alert("Error al procesar el archivo de audio.");
+    }
   }
 
   function renderClip(trackId, name, duration) {
@@ -216,11 +375,10 @@
 
     const clip = document.createElement('div');
     clip.className = 'audio-clip';
-    clip.innerText = name;
+    clip.innerText = `░ ${name}`;
     clip.style.width = `${duration * PIXELS_PER_SECOND}px`;
     clip.style.left = '0px';
 
-    // Eventos para arrastrar el clip (desplazamiento temporal)
     let isDragging = false;
     let startX = 0;
     let initialLeft = 0;
@@ -237,6 +395,10 @@
       let newLeft = initialLeft + deltaX;
       if (newLeft < 0) newLeft = 0;
 
+      // Límite visual marcado por la regla de 80 minutos
+      const maxLeft = MAX_DURATION_SEC * PIXELS_PER_SECOND - (duration * PIXELS_PER_SECOND);
+      if (newLeft > maxLeft) newLeft = maxLeft;
+
       clip.style.left = `${newLeft}px`;
       
       const trackObj = tracks.find(t => t.id === trackId);
@@ -249,26 +411,19 @@
     timeline.appendChild(clip);
   }
 
-  function updateGainNodes() {
+  function updateGains() {
     const hasSolo = tracks.some(t => t.isSolo);
-
     tracks.forEach(t => {
-      let activeGain = t.volume;
-
-      if (t.isMuted) {
-        activeGain = 0;
-      } else if (hasSolo && !t.isSolo) {
-        activeGain = 0;
-      }
-
-      t.gainNode.gain.value = activeGain;
+      let gainVal = t.volume;
+      if (t.isMuted || (hasSolo && !t.isSolo)) gainVal = 0;
+      t.gainNode.gain.value = gainVal;
     });
   }
 
   function removeTrack(id) {
     tracks = tracks.filter(t => t.id !== id);
     document.getElementById(`track-${id}`).remove();
-    updateGainNodes();
+    updateGains();
   }
 
   function togglePlay() {
@@ -279,14 +434,12 @@
       activeSources = [];
       isPlaying = false;
     } else {
-      updateGainNodes();
+      updateGains();
       tracks.forEach(t => {
         if (!t.buffer) return;
         const source = audioCtx.createBufferSource();
         source.buffer = t.buffer;
         source.connect(t.gainNode);
-        
-        // Inicia el audio respetando el offset configurado en el timeline
         source.start(audioCtx.currentTime + t.startTime);
         activeSources.push(source);
       });
@@ -307,22 +460,19 @@
     });
 
     if (maxEndTime === 0) {
-      alert("Carga al menos un archivo de audio para exportar.");
+      alert("Carga al menos una pista de audio para realizar la exportación.");
       return;
     }
 
     const renderDuration = Math.min(maxEndTime, MAX_DURATION_SEC);
     const offlineCtx = new OfflineAudioContext(2, renderDuration * targetSampleRate, targetSampleRate);
-
     const hasSolo = tracks.some(t => t.isSolo);
 
     tracks.forEach(t => {
       if (!t.buffer) return;
 
       let activeVolume = t.volume;
-      if (t.isMuted || (hasSolo && !t.isSolo)) {
-        activeVolume = 0;
-      }
+      if (t.isMuted || (hasSolo && !t.isSolo)) activeVolume = 0;
 
       const source = offlineCtx.createBufferSource();
       const gain = offlineCtx.createGain();
@@ -350,7 +500,7 @@
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `mezcla_${targetSampleRate}Hz_${bitDepth}bit.wav`;
+    a.download = `mezcla_master_${targetSampleRate}Hz_${bitDepth}bit.wav`;
     a.click();
   }
 </script>
